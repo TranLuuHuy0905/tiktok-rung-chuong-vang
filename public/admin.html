@@ -3,19 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Điều khiển Rung Chuông Vàng — Admin Console</title>
+    <title>Rung Chuông Vàng — Bảng Điều Khiển Studio</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <script src="/socket.io/socket.io.js"></script>
     <style>
       :root {
-        --bg-canvas: #0b1120;
-        --bg-surface: #111827;
-        --bg-input: #0f172a;
+        --bg-canvas: #070b14;
+        --bg-surface: #0f172a;
+        --bg-elevated: #111827;
+        --bg-input: #090f1d;
         --border-hairline: #1e293b;
         --border-strong: #334155;
         --ink-primary: #f8fafc;
@@ -25,9 +26,9 @@
         --accent-gold-hover: #d97706;
         --accent-blue: #2563eb;
         --accent-blue-hover: #1d4ed8;
-        --accent-emerald: #10b981;
         --accent-crimson: #dc2626;
         --accent-crimson-hover: #b91c1c;
+        --accent-emerald: #10b981;
       }
 
       * {
@@ -36,28 +37,44 @@
         padding: 0;
       }
 
+      html,
       body {
-        min-height: 100vh;
-        background-color: var(--bg-canvas);
+        height: 100%;
+        background: var(--bg-canvas);
         color: var(--ink-primary);
         font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-        line-height: 1.5;
+        line-height: 1.45;
         -webkit-font-smoothing: antialiased;
       }
 
-      /* Top Bar Contract: 3 zones separated by gap */
+      .studio-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* Single Unified Top Command Bar */
       .top-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 32px;
-        padding: 16px 28px;
-        background: var(--bg-surface);
+        gap: 16px;
+        padding: 10px 20px;
+        background: var(--bg-elevated);
         border-bottom: 1px solid var(--border-hairline);
+        flex-shrink: 0;
+      }
+
+      .top-left {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        min-width: 0;
       }
 
       .brand-wordmark {
-        font-size: 18px;
+        font-size: 16px;
         font-weight: 800;
         letter-spacing: -0.01em;
         color: var(--ink-primary);
@@ -66,81 +83,19 @@
         flex-shrink: 0;
       }
 
-      .top-nav {
+      .tiktok-inline-form {
         display: flex;
         align-items: center;
-        gap: 24px;
+        gap: 8px;
       }
 
-      .nav-link {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--ink-muted);
-        text-decoration: none;
-        white-space: nowrap;
-        flex-shrink: 0;
-        transition: color 0.15s ease;
-      }
-
-      .nav-link:hover,
-      .nav-link.active {
-        color: var(--ink-primary);
-      }
-
-      .top-action-btn {
-        display: inline-flex;
+      .top-metrics {
+        display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 8px 16px;
-        min-height: 40px;
+        gap: 10px;
         font-size: 13px;
-        font-weight: 700;
-        color: #0b1120;
-        background: var(--accent-gold);
-        border-radius: 8px;
-        text-decoration: none;
+        color: var(--ink-muted);
         white-space: nowrap;
-        flex-shrink: 0;
-        transition: background-color 0.15s ease;
-      }
-
-      .top-action-btn:hover {
-        background: var(--accent-gold-hover);
-      }
-
-      /* Main Layout */
-      .container {
-        max-width: 1180px;
-        margin: 0 auto;
-        padding: 28px 24px 40px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-
-      .summary-strip {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding-bottom: 18px;
-        border-bottom: 1px solid var(--border-hairline);
-      }
-
-      .page-heading {
-        font-size: 24px;
-        font-weight: 800;
-        color: var(--ink-primary);
-      }
-
-      .summary-meta {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 12px;
-        font-size: 14px;
-        color: var(--ink-secondary);
         font-variant-numeric: tabular-nums;
       }
 
@@ -151,67 +106,23 @@
         color: var(--ink-primary);
       }
 
-      /* 4 Functional Cards Grid */
-      .cards-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 20px;
-      }
-
-      @media (max-width: 900px) {
-        .cards-grid {
-          grid-template-columns: 1fr;
-        }
-        .top-nav {
-          display: none;
-        }
-      }
-
-      .card {
-        background: var(--bg-surface);
-        border: 1px solid var(--border-hairline);
-        border-radius: 14px;
-        padding: 24px;
+      .top-actions {
         display: flex;
-        flex-direction: column;
-        gap: 18px;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
       }
 
-      .card-header {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .card-title {
-        font-size: 17px;
-        font-weight: 700;
-        color: var(--ink-primary);
-      }
-
-      .card-desc {
-        font-size: 14px;
-        color: var(--ink-muted);
-      }
-
-      /* Form & Buttons */
-      .field-row {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-
+      /* Inputs & Buttons */
       .text-input {
-        flex: 1;
-        min-width: 200px;
-        min-height: 44px;
-        padding: 10px 14px;
+        min-height: 36px;
+        padding: 6px 12px;
         border-radius: 8px;
         border: 1px solid var(--border-strong);
         background: var(--bg-input);
         color: var(--ink-primary);
         font-family: inherit;
-        font-size: 14px;
+        font-size: 13px;
         outline: none;
         transition: border-color 0.15s ease;
       }
@@ -224,17 +135,18 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        min-height: 44px;
-        padding: 10px 18px;
+        gap: 6px;
+        min-height: 36px;
+        padding: 6px 13px;
         border-radius: 8px;
         border: 1px solid transparent;
         font-family: inherit;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
         cursor: pointer;
         white-space: nowrap;
         flex-shrink: 0;
+        text-decoration: none;
         transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
       }
 
@@ -244,8 +156,14 @@
       }
 
       .btn:disabled {
-        opacity: 0.55;
+        opacity: 0.5;
         cursor: not-allowed;
+      }
+
+      .btn-sm {
+        min-height: 32px;
+        padding: 5px 10px;
+        font-size: 12px;
       }
 
       .btn-primary {
@@ -291,12 +209,67 @@
         background: var(--accent-crimson-hover);
       }
 
-      /* Status Text Line (Zero-pill) */
-      .status-line {
+      /* Main 2-Column Cockpit */
+      .cockpit-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 390px;
+      }
+
+      .cockpit-left {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-right: 1px solid var(--border-hairline);
+        padding: 16px 20px;
+        gap: 14px;
+        overflow: hidden;
+      }
+
+      /* Pinned Live Controls (always accessible) */
+      .live-controls-panel {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        flex-shrink: 0;
+      }
+
+      .control-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .control-row + .control-row {
+        padding-top: 10px;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      .field-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .section-label {
         font-size: 13px;
+        font-weight: 700;
+        color: var(--ink-primary);
+        white-space: nowrap;
+      }
+
+      .status-line {
+        font-size: 12px;
         font-weight: 600;
         color: var(--ink-muted);
-        padding-top: 4px;
       }
 
       .status-line.connected {
@@ -311,148 +284,113 @@
         color: #f87171;
       }
 
-      /* Game Controls List */
       .question-buttons-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        max-height: 176px;
+        grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+        gap: 8px;
+        max-height: 112px;
         overflow-y: auto;
         padding-right: 4px;
       }
 
-      @media (max-width: 560px) {
-        .question-buttons-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      .question-preview-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: 150px;
-        overflow-y: auto;
-        padding-top: 6px;
-        border-top: 1px solid var(--border-hairline);
-      }
-
-      .question-preview-item {
-        font-size: 13px;
-        color: var(--ink-muted);
+      .active-question-strip {
+        font-size: 12px;
+        color: var(--ink-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
-      .question-preview-item strong {
-        color: var(--ink-secondary);
-      }
-
-      .divider-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border-hairline);
-      }
-
-      /* System Log Feed & Question Bank */
-      .log-card,
-      .bank-card {
-        grid-column: 1 / -1;
-      }
-
-      .bank-form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .bank-options-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-      }
-
-      @media (max-width: 640px) {
-        .bank-options-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      .bank-list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        max-height: 320px;
-        overflow-y: auto;
-        padding-top: 6px;
-        border-top: 1px solid var(--border-hairline);
-      }
-
-      .bank-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        padding: 12px 14px;
-        border-radius: 10px;
-        border: 1px solid var(--border-hairline);
-        background: var(--bg-input);
-      }
-
-      .bank-item-info {
-        min-width: 0;
+      /* Bottom Tabbed Drawer */
+      .drawer-section {
         flex: 1;
+        min-height: 0;
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        overflow: hidden;
       }
 
-      .bank-item-title {
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--ink-primary);
-      }
-
-      .bank-item-sub {
-        font-size: 12px;
-        color: var(--ink-muted);
-      }
-
-      .bank-item-actions {
+      .drawer-tabs {
         display: flex;
         align-items: center;
-        gap: 8px;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 12px;
+        background: var(--bg-elevated);
+        border-bottom: 1px solid var(--border-hairline);
         flex-shrink: 0;
       }
 
-      .btn-sm {
-        min-height: 34px;
-        padding: 6px 12px;
-        font-size: 12px;
+      .tab-buttons {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
       }
 
+      .tab-btn {
+        min-height: 34px;
+        padding: 6px 14px;
+        border-radius: 7px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--ink-muted);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+      }
+
+      .tab-btn:hover {
+        color: var(--ink-primary);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .tab-btn.is-active {
+        background: rgba(245, 158, 11, 0.15);
+        border-color: rgba(245, 158, 11, 0.55);
+        color: #fde68a;
+      }
+
+      .tab-panel {
+        flex: 1;
+        min-height: 0;
+        display: none;
+        flex-direction: column;
+        padding: 14px 16px;
+        gap: 12px;
+        overflow-y: auto;
+      }
+
+      .tab-panel.is-active {
+        display: flex;
+      }
+
+      /* Log Feed */
       .log-box {
-        height: 280px;
+        flex: 1;
+        min-height: 160px;
         overflow-y: auto;
         background: #070b14;
         border: 1px solid var(--border-hairline);
-        border-radius: 10px;
-        padding: 14px 16px;
+        border-radius: 8px;
+        padding: 12px 14px;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 13px;
-        line-height: 1.65;
+        font-size: 12px;
+        line-height: 1.6;
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 5px;
       }
 
       .log-entry {
         display: flex;
-        gap: 12px;
+        gap: 10px;
         align-items: baseline;
       }
 
@@ -478,306 +416,487 @@
       .log-entry.level-error .log-msg {
         color: #f87171;
       }
+
+      /* Question Bank */
+      .bank-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .bank-form {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .bank-options-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .bank-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .bank-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-input);
+      }
+
+      .bank-item-info {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+
+      .bank-item-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bank-item-sub {
+        font-size: 12px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .bank-item-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+      }
+
+      /* Right OBS Preview Pane */
+      .cockpit-right {
+        background: #030712;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        min-height: 0;
+      }
+
+      .preview-caption {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-muted);
+      }
+
+      .preview-caption a {
+        color: #fbbf24;
+        text-decoration: none;
+      }
+
+      .preview-caption a:hover {
+        text-decoration: underline;
+      }
+
+      .preview-frame-box {
+        flex: 1;
+        min-height: 0;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .preview-aspect {
+        height: 100%;
+        max-height: 100%;
+        aspect-ratio: 9 / 16;
+        max-width: 100%;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid var(--border-hairline);
+        background: #050d22;
+      }
+
+      .preview-aspect iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      }
+
+      /* Responsive fallback for narrower laptops / tablets */
+      @media (max-width: 1180px) {
+        .studio-shell {
+          height: auto;
+          min-height: 100vh;
+          overflow: visible;
+        }
+        .top-bar {
+          flex-wrap: wrap;
+        }
+        .cockpit-grid {
+          grid-template-columns: 1fr;
+        }
+        .cockpit-left {
+          border-right: 0;
+          border-bottom: 1px solid var(--border-hairline);
+          overflow: visible;
+        }
+        .drawer-section {
+          min-height: 360px;
+        }
+        .cockpit-right {
+          height: 700px;
+        }
+        .bank-options-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 640px) {
+        .bank-options-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
-    <header class="top-bar">
-      <a href="/" class="brand-wordmark">Rung Chuông Vàng</a>
-      <nav class="top-nav" aria-label="Điều hướng chính">
-        <a href="/admin" class="nav-link active">Bảng điều khiển</a>
-        <a href="/overlay" class="nav-link" target="_blank" rel="noopener">Màn hình OBS</a>
-        <a href="/" class="nav-link">Studio tổng hợp</a>
-      </nav>
-      <a href="/overlay" class="top-action-btn" target="_blank" rel="noopener">Mở Overlay OBS</a>
-    </header>
-
-    <main class="container">
-      <section class="summary-strip">
-        <h1 class="page-heading">Bảng Điều Khiển Livestream</h1>
-        <div class="summary-meta">
-          <span>Trên sàn: <span id="statRemaining" class="mono-value">0 / 0</span></span>
-          <span aria-hidden="true">·</span>
-          <span>Trạng thái: <span id="statPhase" class="mono-value">Chờ phát câu hỏi</span></span>
-          <span aria-hidden="true">·</span>
-          <span>Đếm ngược: <span id="statTimer" class="mono-value">15s</span></span>
-        </div>
-      </section>
-
-      <section class="cards-grid">
-        <!-- Thẻ 1: Kết nối TikTok Live & Chọn ngẫu nhiên thí sinh -->
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">1. Kết nối TikTok Live & Tuyển thí sinh</h2>
-            <p class="card-desc">
-              Kết nối phòng Live để ghi nhận toàn bộ người bình luận, sau đó chọn ngẫu nhiên thí sinh lên sàn đấu.
-            </p>
-          </div>
-          <form id="tiktokConnectForm" class="field-row">
+    <div class="studio-shell">
+      <!-- Thanh điều khiển trên cùng: 1 dòng gọn -->
+      <header class="top-bar">
+        <div class="top-left">
+          <a href="/" class="brand-wordmark">Rung Chuông Vàng</a>
+          <form id="tiktokConnectForm" class="tiktok-inline-form">
             <input
               id="tiktokUsernameInput"
               class="text-input"
               type="text"
-              placeholder="Nhập username (ví dụ: @tenkenh)"
+              placeholder="@username TikTok Live"
               autocomplete="off"
               aria-label="TikTok Username"
+              style="width: 185px;"
             />
-            <button id="connectBtn" type="submit" class="btn btn-primary">Kết nối TikTok Live</button>
-            <button id="disconnectBtn" type="button" class="btn btn-secondary" hidden>Ngắt kết nối</button>
+            <button id="connectBtn" type="submit" class="btn btn-primary btn-sm">Kết nối Live</button>
+            <button id="disconnectBtn" type="button" class="btn btn-secondary btn-sm" hidden>Ngắt</button>
           </form>
-          <div id="tiktokStatusLine" class="status-line">
-            Trạng thái TikTok: Chưa kết nối
-          </div>
+          <span id="tiktokStatusLine" class="status-line">Chưa kết nối</span>
+        </div>
 
-          <div class="divider-row" style="flex-wrap: wrap;">
-            <span class="card-desc">
-              Đã ghi nhận <strong id="liveCommentersCount" class="mono-value">0</strong> người bình luận trong phiên Live
-            </span>
-            <button id="clearPoolBtn" type="button" class="btn btn-secondary" style="min-height: 36px; padding: 6px 12px; font-size: 12px;">
-              Xóa pool
-            </button>
-          </div>
+        <div class="top-metrics">
+          <span>Trên sàn: <span id="statRemaining" class="mono-value">0 / 0</span></span>
+          <span aria-hidden="true">·</span>
+          <span>Bình luận: <span id="liveCommentersCount" class="mono-value">0</span></span>
+          <span aria-hidden="true">·</span>
+          <span id="statPhase" class="mono-value">Chờ phát câu</span>
+          <span aria-hidden="true">·</span>
+          <span id="statTimer" class="mono-value">15s</span>
+        </div>
 
-          <div class="field-row">
-            <input
-              id="randomCountInput"
-              class="text-input"
-              type="number"
-              min="1"
-              max="100"
-              value="15"
-              style="max-width: 110px; min-width: 90px;"
-              aria-label="Số lượng thí sinh chọn ngẫu nhiên"
-            />
-            <button id="pickRandomBtn" type="button" class="btn btn-gold">
-              Chọn ngẫu nhiên từ bình luận
-            </button>
-            <button id="toggleRosterLockBtn" type="button" class="btn btn-secondary">
-              Khóa sàn đấu
-            </button>
-          </div>
-          <div id="rosterStatusLine" class="status-line">
-            Chế độ hiện tại: Nhận tự do qua bình luận A, B, C, D
-          </div>
-        </article>
+        <div class="top-actions">
+          <button id="toggleVoiceBtn" type="button" class="btn btn-secondary btn-sm is-active">
+            Giọng đọc: Bật
+          </button>
+          <button id="toggleSoundBtn" type="button" class="btn btn-secondary btn-sm is-active">
+            Âm thanh: Bật
+          </button>
+          <button id="copyObsUrlBtn" type="button" class="btn btn-secondary btn-sm">
+            Copy link OBS
+          </button>
+          <button id="resetGameBtn" type="button" class="btn btn-danger btn-sm">
+            Reset Ván Mới
+          </button>
+        </div>
+      </header>
 
-        <!-- Thẻ 2: Điều khiển câu hỏi & Reset -->
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">2. Điều khiển trò chơi</h2>
-            <p class="card-desc">
-              Phát lần lượt các câu hỏi (đếm ngược 15s). Người cuối cùng còn lại trên sàn là Quán quân Rung Chuông Vàng.
-            </p>
-          </div>
-
-          <div id="questionButtonsGrid" class="question-buttons-grid">
-            <button type="button" class="btn btn-secondary" data-q-index="0">Phát Câu 1</button>
-            <button type="button" class="btn btn-secondary" data-q-index="1">Phát Câu 2</button>
-            <button type="button" class="btn btn-secondary" data-q-index="2">Phát Câu 3</button>
-          </div>
-
-          <div class="divider-row" style="flex-wrap: wrap;">
-            <span class="card-desc">Tự động trộn thứ tự câu hỏi mỗi khi bắt đầu ván mới</span>
-            <div class="field-row">
-              <button id="playRandomQuestionBtn" type="button" class="btn btn-gold btn-sm">
-                Phát ngẫu nhiên 1 câu
-              </button>
-              <button id="toggleShuffleModeBtn" type="button" class="btn btn-secondary btn-sm is-active">
-                Mix ván mới: Bật
-              </button>
-            </div>
-          </div>
-
-          <div class="divider-row" style="flex-wrap: wrap;">
-            <span id="autoStatusLine" class="status-line">
-              Vận hành tự động: Đang tắt (điều khiển thủ công)
-            </span>
-            <div class="field-row" style="align-items: center;">
-              <label for="autoTransitionSelect" class="card-desc" style="color: var(--ink-secondary); font-weight: 600;">
-                Nghỉ chuyển câu:
-              </label>
-              <select
-                id="autoTransitionSelect"
-                class="text-input"
-                style="min-width: 120px; max-width: 145px; flex: 0;"
-                aria-label="Thời gian nghỉ chuyển câu tiếp theo"
-              >
-                <option value="6">6 giây (Nhanh)</option>
-                <option value="9" selected>9 giây (Khuyên dùng)</option>
-                <option value="12">12 giây (Thoải mái)</option>
-                <option value="15">15 giây (Chậm)</option>
-              </select>
-              <button id="toggleAutoModeBtn" type="button" class="btn btn-secondary">
-                Bật Tự động vận hành
-              </button>
-            </div>
-          </div>
-
-          <div id="winnerBannerLine" class="status-line connected" hidden></div>
-
-          <div id="tiebreakControls" class="divider-row" style="flex-wrap: wrap;" hidden>
-            <span class="card-desc">Nhiều người cùng trụ hạng — chốt 1 Quán quân cuối cùng:</span>
-            <div class="field-row">
-              <button id="tiebreakFastestBtn" type="button" class="btn btn-gold">Nhanh nhất</button>
-              <button id="tiebreakRandomBtn" type="button" class="btn btn-secondary">Bốc thăm 1 người</button>
-            </div>
-          </div>
-
-          <div id="questionPreviewList" class="question-preview-list"></div>
-
-          <div class="divider-row" style="flex-wrap: wrap;">
-            <span class="card-desc">Điều khiển giọng đọc MC &amp; hiệu ứng âm thanh (ẩn khỏi màn hình Live)</span>
-            <div class="field-row">
-              <button id="toggleVoiceBtn" type="button" class="btn btn-secondary is-active">
-                Giọng đọc: Bật
-              </button>
-              <button id="toggleSoundBtn" type="button" class="btn btn-secondary is-active">
-                Âm thanh: Bật
-              </button>
-              <button id="testVoiceBtn" type="button" class="btn btn-gold">
-                Thử giọng đọc
-              </button>
-            </div>
-          </div>
-
-          <div class="divider-row">
-            <span class="card-desc">Xóa toàn bộ người chơi trên sàn và đưa về trạng thái ban đầu</span>
-            <button id="resetGameBtn" type="button" class="btn btn-danger">Reset Ván Mới</button>
-          </div>
-        </article>
-
-        <!-- Thẻ 3: Test nhanh -->
-        <article class="card">
-          <div class="card-header">
-            <h2 class="card-title">3. Test nhanh (Giả lập bình luận)</h2>
-            <p class="card-desc">
-              Tạo bình luận Live ngẫu nhiên hoặc gửi 15 đáp án A, B, C, D rải rác cách nhau 200ms để kiểm thử ngay.
-            </p>
-          </div>
-          <div class="field-row">
-            <button id="simulateChatBtn" type="button" class="btn btn-gold">
-              Giả lập 15 người bình luận
-            </button>
-            <button id="simulatePoolBtn" type="button" class="btn btn-secondary">
-              Giả lập 25 bình luận Live
-            </button>
-          </div>
-          <div id="simulateStatusLine" class="status-line">
-            Mẹo: Nhấn "Giả lập 25 bình luận Live" rồi chọn ngẫu nhiên 15 thí sinh, hoặc nhấn "Phát Câu 1" rồi "Giả lập 15 người bình luận".
-          </div>
-        </article>
-
-        <!-- Thẻ 4: Nhật ký hệ thống -->
-        <article class="card log-card">
-          <div class="card-header">
-            <h2 class="card-title">4. Nhật ký hệ thống</h2>
-            <p class="card-desc">Theo dõi trạng thái kết nối TikTok Live, bình luận hợp lệ và kết quả từng câu hỏi.</p>
-          </div>
-          <div id="systemLogBox" class="log-box" role="log" aria-live="polite"></div>
-        </article>
-
-        <!-- Thẻ 5: Ngân hàng câu hỏi -->
-        <article class="card bank-card">
-          <div class="card-header">
-            <h2 id="questionBankTitle" class="card-title">5. Ngân hàng câu hỏi</h2>
-            <p class="card-desc">
-              Thêm từng câu hoặc tải lên cả bộ câu hỏi từ file (.JSON, .CSV, .TXT) và trộn ngẫu nhiên thứ tự câu hỏi.
-            </p>
-          </div>
-
-          <div class="divider-row" style="flex-wrap: wrap; padding-top: 0; border-top: none;">
-            <div class="field-row" style="align-items: center;">
-              <select
-                id="importModeSelect"
-                class="text-input"
-                style="min-width: 150px; max-width: 190px; flex: 0;"
-                aria-label="Chế độ nhập file câu hỏi"
-              >
-                <option value="append">Thêm vào bộ hiện có</option>
-                <option value="replace">Thay thế toàn bộ</option>
-              </select>
-              <input
-                id="importQuestionsFileInput"
-                type="file"
-                accept=".json,.csv,.txt,.tsv"
-                hidden
-              />
-              <button id="importQuestionsBtn" type="button" class="btn btn-gold">
-                Nhập từ file (.JSON / .CSV / .TXT)
-              </button>
-              <button id="shuffleQuestionsBtn" type="button" class="btn btn-secondary">
-                Trộn ngẫu nhiên thứ tự
-              </button>
-            </div>
-            <div class="field-row">
-              <button id="downloadTemplateBtn" type="button" class="btn btn-secondary btn-sm">
-                Tải file mẫu (.TXT)
-              </button>
-              <button id="exportQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
-                Xuất JSON
-              </button>
-            </div>
-          </div>
-          <div class="card-desc" style="font-size: 12px;">
-            Định dạng TXT: <code>Câu 1: ...</code> / <code>A. ...</code> / <code>B. ...</code> / <code>C. ...</code> / <code>D. ...</code> / <code>Đáp án: B</code> (hoặc CSV 7 cột: <code>Chủ đề, Câu hỏi, A, B, C, D, Đáp án đúng</code>).
-          </div>
-          <div id="importFileStatus" class="status-line" hidden></div>
-
-          <form id="addQuestionForm" class="bank-form">
-            <div class="field-row">
-              <input
-                id="qTopicInput"
-                class="text-input"
-                type="text"
-                placeholder="Chủ đề (vd: Lịch sử, Đố vui, Âm nhạc)"
-                style="max-width: 280px;"
-              />
-              <input
-                id="qTextInput"
-                class="text-input"
-                type="text"
-                placeholder="Nhập nội dung câu hỏi..."
-                required
-              />
-            </div>
-
-            <div class="bank-options-grid">
-              <input id="qOptAInput" class="text-input" type="text" placeholder="Đáp án A" required />
-              <input id="qOptBInput" class="text-input" type="text" placeholder="Đáp án B" required />
-              <input id="qOptCInput" class="text-input" type="text" placeholder="Đáp án C" required />
-              <input id="qOptDInput" class="text-input" type="text" placeholder="Đáp án D" required />
-            </div>
-
-            <div class="field-row" style="align-items: center; justify-content: space-between;">
-              <div class="field-row" style="align-items: center;">
-                <label for="qCorrectSelect" class="card-desc" style="color: var(--ink-secondary); font-weight: 600;">
-                  Đáp án đúng:
-                </label>
-                <select id="qCorrectSelect" class="text-input" style="min-width: 110px; max-width: 130px; flex: 0;">
-                  <option value="A">Đáp án A</option>
-                  <option value="B">Đáp án B</option>
-                  <option value="C">Đáp án C</option>
-                  <option value="D">Đáp án D</option>
-                </select>
-                <button type="submit" class="btn btn-gold">+ Thêm câu hỏi</button>
+      <!-- Khu vực chính 2 cột trong 1 tab -->
+      <div class="cockpit-grid">
+        <!-- Cột trái: Vận hành trực tiếp + Tab con -->
+        <section class="cockpit-left" aria-label="Bảng điều khiển vận hành">
+          <!-- Phần ghim trên: Thao tác dùng liên tục khi đang Live -->
+          <div class="live-controls-panel">
+            <!-- Hàng 1: Tuyển thí sinh -->
+            <div class="control-row">
+              <div class="field-group">
+                <span class="section-label">Thí sinh:</span>
+                <input
+                  id="randomCountInput"
+                  class="text-input"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value="16"
+                  style="width: 68px;"
+                  aria-label="Số lượng thí sinh chọn ngẫu nhiên"
+                />
+                <button id="pickRandomBtn" type="button" class="btn btn-gold btn-sm">
+                  Chọn ngẫu nhiên từ bình luận
+                </button>
+                <button id="toggleRosterLockBtn" type="button" class="btn btn-secondary btn-sm">
+                  Khóa sàn đấu
+                </button>
+                <button id="clearPoolBtn" type="button" class="btn btn-secondary btn-sm">
+                  Xóa pool
+                </button>
               </div>
-              <button id="resetDefaultQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
-                Khôi phục 3 câu mặc định
-              </button>
+              <span id="rosterStatusLine" class="status-line">
+                Nhận tự do qua bình luận A, B, C, D
+              </span>
             </div>
-            <div id="questionFormStatus" class="status-line" hidden></div>
-          </form>
 
-          <div id="questionBankList" class="bank-list"></div>
-        </article>
-      </section>
-    </main>
+            <!-- Hàng 2: Vận hành tự động & Mix câu hỏi -->
+            <div class="control-row">
+              <div class="field-group">
+                <span class="section-label">Vận hành:</span>
+                <button id="toggleAutoModeBtn" type="button" class="btn btn-secondary btn-sm">
+                  Bật Tự động
+                </button>
+                <button id="toggleShuffleModeBtn" type="button" class="btn btn-secondary btn-sm is-active">
+                  Mix ván mới: Bật
+                </button>
+                <label class="field-group" style="gap: 6px; font-size: 12px; color: var(--ink-muted);">
+                  <span>Nghỉ chuyển câu:</span>
+                  <select
+                    id="autoTransitionSelect"
+                    class="text-input"
+                    style="min-height: 32px; padding: 4px 8px; font-size: 12px;"
+                    aria-label="Thời gian nghỉ chuyển câu tiếp theo"
+                  >
+                    <option value="6">6s (Nhanh)</option>
+                    <option value="9" selected>9s (Khuyên dùng)</option>
+                    <option value="12">12s (Thoải mái)</option>
+                    <option value="15">15s (Chậm)</option>
+                  </select>
+                </label>
+              </div>
+              <span id="autoStatusLine" class="status-line">
+                Tự động: Tắt (thủ công)
+              </span>
+            </div>
+
+            <!-- Hàng 3: Phát câu hỏi & Tiebreak -->
+            <div class="control-row" style="flex-direction: column; align-items: stretch; gap: 8px;">
+              <div class="control-row">
+                <div class="field-group">
+                  <span class="section-label">Phát câu hỏi:</span>
+                  <button id="playRandomQuestionBtn" type="button" class="btn btn-gold btn-sm">
+                    Phát ngẫu nhiên 1 câu
+                  </button>
+                  <span id="winnerBannerLine" class="status-line connected" hidden></span>
+                </div>
+                <div id="tiebreakControls" class="field-group" hidden>
+                  <span class="status-line connecting">Chốt Quán quân:</span>
+                  <button id="tiebreakFastestBtn" type="button" class="btn btn-gold btn-sm">Nhanh nhất</button>
+                  <button id="tiebreakRandomBtn" type="button" class="btn btn-secondary btn-sm">Bốc thăm</button>
+                </div>
+              </div>
+
+              <div id="questionButtonsGrid" class="question-buttons-grid">
+                <button type="button" class="btn btn-secondary btn-sm" data-q-index="0">Phát Câu 1</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-q-index="1">Phát Câu 2</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-q-index="2">Phát Câu 3</button>
+              </div>
+
+              <div id="activeQuestionPreview" class="active-question-strip">
+                Chưa phát câu hỏi — bấm Phát Câu 1 hoặc bật Tự động để bắt đầu.
+              </div>
+            </div>
+          </div>
+
+          <!-- Phần Tab con bên dưới: Nhật ký Live | Ngân hàng câu hỏi | Test nhanh & Âm thanh -->
+          <div class="drawer-section">
+            <div class="drawer-tabs">
+              <div class="tab-buttons" role="tablist" aria-label="Khu vực quản lý chi tiết">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="true"
+                  class="tab-btn is-active"
+                  data-tab-target="logs"
+                >
+                  Nhật ký Live
+                </button>
+                <button
+                  id="bankTabBtn"
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  class="tab-btn"
+                  data-tab-target="bank"
+                >
+                  Ngân hàng câu hỏi (3)
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected="false"
+                  class="tab-btn"
+                  data-tab-target="test"
+                >
+                  Test nhanh &amp; Âm thanh
+                </button>
+              </div>
+            </div>
+
+            <!-- Tab 1: Nhật ký Live -->
+            <div id="tabPanelLogs" class="tab-panel is-active" data-tab-panel="logs">
+              <div id="systemLogBox" class="log-box" role="log" aria-live="polite"></div>
+            </div>
+
+            <!-- Tab 2: Ngân hàng câu hỏi -->
+            <div id="tabPanelBank" class="tab-panel" data-tab-panel="bank">
+              <div class="bank-toolbar">
+                <div class="field-group">
+                  <select
+                    id="importModeSelect"
+                    class="text-input"
+                    style="min-height: 32px; padding: 4px 8px; font-size: 12px;"
+                    aria-label="Chế độ nhập file câu hỏi"
+                  >
+                    <option value="append">Thêm vào bộ hiện có</option>
+                    <option value="replace">Thay thế toàn bộ</option>
+                  </select>
+                  <input
+                    id="importQuestionsFileInput"
+                    type="file"
+                    accept=".json,.csv,.txt,.tsv"
+                    hidden
+                  />
+                  <button id="importQuestionsBtn" type="button" class="btn btn-gold btn-sm">
+                    Nhập file (.JSON / .CSV / .TXT)
+                  </button>
+                  <button id="shuffleQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
+                    Trộn thứ tự bộ câu
+                  </button>
+                </div>
+                <div class="field-group">
+                  <button id="downloadTemplateBtn" type="button" class="btn btn-secondary btn-sm">
+                    Tải mẫu (.TXT)
+                  </button>
+                  <button id="exportQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
+                    Xuất JSON
+                  </button>
+                  <button id="resetDefaultQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
+                    Mặc định (3 câu)
+                  </button>
+                </div>
+              </div>
+
+              <div class="status-line">
+                Mẫu TXT: <code>Câu 1: ...</code> · <code>A. ... B. ... C. ... D. ...</code> · <code>Đáp án: B</code> (hoặc CSV 7 cột: Chủ đề, Câu hỏi, A, B, C, D, Đáp án đúng).
+              </div>
+              <div id="importFileStatus" class="status-line" hidden></div>
+
+              <form id="addQuestionForm" class="bank-form">
+                <div class="field-group" style="width: 100%;">
+                  <input
+                    id="qTopicInput"
+                    class="text-input"
+                    type="text"
+                    placeholder="Chủ đề (vd: Đố vui)"
+                    style="width: 190px;"
+                  />
+                  <input
+                    id="qTextInput"
+                    class="text-input"
+                    type="text"
+                    placeholder="Nhập nội dung câu hỏi mới..."
+                    style="flex: 1; min-width: 220px;"
+                    required
+                  />
+                  <select
+                    id="qCorrectSelect"
+                    class="text-input"
+                    style="width: 125px;"
+                    aria-label="Đáp án đúng"
+                  >
+                    <option value="A">Đáp án A</option>
+                    <option value="B">Đáp án B</option>
+                    <option value="C">Đáp án C</option>
+                    <option value="D">Đáp án D</option>
+                  </select>
+                  <button type="submit" class="btn btn-gold btn-sm">+ Thêm câu</button>
+                </div>
+
+                <div class="bank-options-grid">
+                  <input id="qOptAInput" class="text-input" type="text" placeholder="Đáp án A" required />
+                  <input id="qOptBInput" class="text-input" type="text" placeholder="Đáp án B" required />
+                  <input id="qOptCInput" class="text-input" type="text" placeholder="Đáp án C" required />
+                  <input id="qOptDInput" class="text-input" type="text" placeholder="Đáp án D" required />
+                </div>
+                <div id="questionFormStatus" class="status-line" hidden></div>
+              </form>
+
+              <div id="questionBankList" class="bank-list"></div>
+            </div>
+
+            <!-- Tab 3: Test nhanh & Âm thanh -->
+            <div id="tabPanelTest" class="tab-panel" data-tab-panel="test">
+              <div class="status-line">
+                Dùng để kiểm tra giao diện OBS, hiệu ứng pháo hoa và giọng đọc tiếng Việt trước khi lên sóng chính thức.
+              </div>
+              <div class="field-group">
+                <button id="simulateChatBtn" type="button" class="btn btn-gold">
+                  Giả lập 15 người bình luận (A/B/C/D)
+                </button>
+                <button id="simulatePoolBtn" type="button" class="btn btn-secondary">
+                  Giả lập 25 bình luận Live
+                </button>
+                <button id="testVoiceBtn" type="button" class="btn btn-secondary">
+                  Thử giọng đọc MC
+                </button>
+              </div>
+              <div id="simulateStatusLine" class="status-line">
+                Mẹo: Bấm "Giả lập 25 bình luận Live" rồi bấm "Chọn ngẫu nhiên từ bình luận", sau đó phát câu hỏi và bấm "Giả lập 15 người bình luận".
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cột phải: Xem trước màn hình dọc OBS trực tiếp trong cùng 1 tab -->
+        <aside class="cockpit-right" aria-label="Xem trước màn hình dọc OBS">
+          <div class="preview-caption">
+            <span>Xem trước OBS Overlay · 1080×1920</span>
+            <a href="/overlay" target="_blank" rel="noopener">Mở toàn màn hình</a>
+          </div>
+          <div class="preview-frame-box">
+            <div class="preview-aspect">
+              <iframe src="/overlay" title="OBS Broadcast Overlay 1080x1920"></iframe>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
 
     <script>
       const socket = io();
 
       const tiktokConnectForm = document.getElementById('tiktokConnectForm');
       const tiktokUsernameInput = document.getElementById('tiktokUsernameInput');
-      const connectBtn = document.getElementById('connectBtn');
       const disconnectBtn = document.getElementById('disconnectBtn');
       const tiktokStatusLine = document.getElementById('tiktokStatusLine');
       const liveCommentersCount = document.getElementById('liveCommentersCount');
@@ -788,11 +907,13 @@
       const rosterStatusLine = document.getElementById('rosterStatusLine');
 
       const questionButtonsGrid = document.getElementById('questionButtonsGrid');
+      const activeQuestionPreview = document.getElementById('activeQuestionPreview');
       const winnerBannerLine = document.getElementById('winnerBannerLine');
       const tiebreakControls = document.getElementById('tiebreakControls');
       const tiebreakFastestBtn = document.getElementById('tiebreakFastestBtn');
       const tiebreakRandomBtn = document.getElementById('tiebreakRandomBtn');
-      const questionPreviewList = document.getElementById('questionPreviewList');
+
+      const bankTabBtn = document.getElementById('bankTabBtn');
       const addQuestionForm = document.getElementById('addQuestionForm');
       const qTopicInput = document.getElementById('qTopicInput');
       const qTextInput = document.getElementById('qTextInput');
@@ -802,7 +923,6 @@
       const qOptDInput = document.getElementById('qOptDInput');
       const qCorrectSelect = document.getElementById('qCorrectSelect');
       const questionFormStatus = document.getElementById('questionFormStatus');
-      const questionBankTitle = document.getElementById('questionBankTitle');
       const importModeSelect = document.getElementById('importModeSelect');
       const importQuestionsFileInput = document.getElementById('importQuestionsFileInput');
       const importQuestionsBtn = document.getElementById('importQuestionsBtn');
@@ -812,6 +932,7 @@
       const importFileStatus = document.getElementById('importFileStatus');
       const resetDefaultQuestionsBtn = document.getElementById('resetDefaultQuestionsBtn');
       const questionBankList = document.getElementById('questionBankList');
+
       const playRandomQuestionBtn = document.getElementById('playRandomQuestionBtn');
       const toggleShuffleModeBtn = document.getElementById('toggleShuffleModeBtn');
       const autoStatusLine = document.getElementById('autoStatusLine');
@@ -819,6 +940,7 @@
       const toggleAutoModeBtn = document.getElementById('toggleAutoModeBtn');
       const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
       const toggleSoundBtn = document.getElementById('toggleSoundBtn');
+      const copyObsUrlBtn = document.getElementById('copyObsUrlBtn');
       const testVoiceBtn = document.getElementById('testVoiceBtn');
       const resetGameBtn = document.getElementById('resetGameBtn');
       const simulateChatBtn = document.getElementById('simulateChatBtn');
@@ -836,6 +958,21 @@
       let shuffleMode = true;
       let voiceEnabled = true;
       let soundEnabled = true;
+
+      // Chuyển đổi giữa 3 tab con bên dưới
+      document.querySelectorAll('.tab-btn[data-tab-target]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const target = btn.dataset.tabTarget;
+          document.querySelectorAll('.tab-btn[data-tab-target]').forEach((b) => {
+            const active = b.dataset.tabTarget === target;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          document.querySelectorAll('.tab-panel[data-tab-panel]').forEach((panel) => {
+            panel.classList.toggle('is-active', panel.dataset.tabPanel === target);
+          });
+        });
+      });
 
       const MOCK_PLAYERS = [
         { uniqueId: 'minhanh_99', nickname: 'Minh Anh' },
@@ -893,73 +1030,80 @@
         systemLogBox.scrollTop = systemLogBox.scrollHeight;
       }
 
+      function phaseLabel(state) {
+        if (state.phase === 'IDLE') return 'Chờ phát câu';
+        if (state.phase === 'QUESTION') return `Đang thi Câu ${(state.currentQuestionIndex ?? 0) + 1}`;
+        if (state.phase === 'REVEAL') return `Đáp án: ${state.correctAnswer}`;
+        if (state.phase === 'WINNER') return 'Có Quán quân!';
+        if (state.phase === 'GAME_OVER') return 'Hết thí sinh';
+        return state.phase;
+      }
+
+      function renderAutoModeUi(isAuto, statusText) {
+        if (isAuto) {
+          autoStatusLine.className = 'status-line connected';
+          autoStatusLine.textContent = statusText || 'Tự động: Đang bật';
+          toggleAutoModeBtn.className = 'btn btn-gold btn-sm';
+          toggleAutoModeBtn.textContent = 'Tắt Tự động';
+        } else {
+          autoStatusLine.className = 'status-line';
+          autoStatusLine.textContent = 'Tự động: Tắt (thủ công)';
+          toggleAutoModeBtn.className = 'btn btn-secondary btn-sm';
+          toggleAutoModeBtn.textContent = 'Bật Tự động';
+        }
+      }
+
       function renderState(state) {
-        if (!state) return;
         latestState = state;
-
-        // Cập nhật summary bar
         statRemaining.textContent = `${state.stats.remaining} / ${state.stats.total}`;
-        statTimer.textContent = state.phase === 'IDLE' ? '15s' : `${state.timeLeft}s`;
+        statPhase.textContent = phaseLabel(state);
+        statTimer.textContent = `${state.phase === 'IDLE' ? state.questionDuration : state.timeLeft}s`;
+        liveCommentersCount.textContent = String(state.liveCommentersCount ?? 0);
 
-        if (state.phase === 'IDLE') {
-          statPhase.textContent = 'Chờ phát câu hỏi';
-        } else if (state.phase === 'QUESTION') {
-          statPhase.textContent = `Đang thi Câu ${state.currentQuestionIndex + 1}`;
-        } else if (state.phase === 'WINNER') {
-          statPhase.textContent = `Quán quân: ${state.winner?.nickname || ''}`;
-        } else if (state.phase === 'GAME_OVER') {
-          statPhase.textContent = 'Hết thí sinh trụ hạng';
-        } else {
-          statPhase.textContent = `Công bố đáp án ${state.correctAnswer}`;
-        }
-
-        // Cập nhật pool bình luận & khóa sàn
-        liveCommentersCount.textContent = String(state.liveCommentersCount || 0);
         if (state.rosterLocked) {
-          rosterStatusLine.className = 'status-line connecting';
-          rosterStatusLine.textContent = 'Chế độ hiện tại: Đã khóa sàn (chỉ thí sinh được chọn mới có thể trả lời)';
           toggleRosterLockBtn.textContent = 'Mở nhận tự do';
+          rosterStatusLine.className = 'status-line connected';
+          rosterStatusLine.textContent = `Đã khóa sàn (${state.stats.total} thí sinh)`;
         } else {
-          rosterStatusLine.className = 'status-line';
-          rosterStatusLine.textContent = 'Chế độ hiện tại: Nhận tự do qua bình luận A, B, C, D';
           toggleRosterLockBtn.textContent = 'Khóa sàn đấu';
+          rosterStatusLine.className = 'status-line';
+          rosterStatusLine.textContent = 'Nhận tự do qua bình luận A, B, C, D';
         }
 
-        // Hiển thị Quán quân hoặc nút chốt Quán quân nếu còn nhiều người trụ hạng
         if (state.phase === 'WINNER' && state.winner) {
           winnerBannerLine.hidden = false;
-          winnerBannerLine.textContent = `Quán quân Rung Chuông Vàng: ${state.winner.nickname} (@${state.winner.uniqueId}) — Người cuối cùng còn lại!`;
+          winnerBannerLine.textContent = `Quán quân: ${state.winner.nickname} (@${state.winner.uniqueId})`;
         } else {
           winnerBannerLine.hidden = true;
         }
 
-        const showTiebreak =
-          state.phase === 'REVEAL' && state.stats.remaining > 1;
+        const showTiebreak = state.phase === 'REVEAL' && state.stats.remaining > 1;
         tiebreakControls.hidden = !showTiebreak;
 
-        // Cập nhật trạng thái TikTok
         const tt = state.tiktok || { status: 'disconnected', username: '', errorMessage: '' };
         tiktokStatusLine.className = 'status-line';
         if (tt.status === 'connected') {
           tiktokStatusLine.classList.add('connected');
-          tiktokStatusLine.textContent = `Trạng thái TikTok: Đã kết nối phòng Live @${tt.username}`;
+          tiktokStatusLine.textContent = `Đã kết nối @${tt.username}`;
           disconnectBtn.hidden = false;
         } else if (tt.status === 'connecting') {
           tiktokStatusLine.classList.add('connecting');
-          tiktokStatusLine.textContent = `Trạng thái TikTok: Đang kết nối tới @${tt.username}...`;
+          tiktokStatusLine.textContent = `Đang nối @${tt.username}...`;
           disconnectBtn.hidden = false;
         } else if (tt.status === 'error') {
           tiktokStatusLine.classList.add('error');
-          tiktokStatusLine.textContent = `Trạng thái TikTok: Lỗi (${tt.errorMessage || 'Không thể kết nối'})`;
+          tiktokStatusLine.textContent = `Lỗi: ${tt.errorMessage || 'Không kết nối được'}`;
           disconnectBtn.hidden = true;
         } else {
-          tiktokStatusLine.textContent = 'Trạng thái TikTok: Chưa kết nối';
+          tiktokStatusLine.textContent = 'Chưa kết nối';
           disconnectBtn.hidden = true;
         }
 
-        // Cập nhật chế độ tự động & mix câu hỏi
         if (typeof state.autoMode === 'boolean') {
           autoMode = state.autoMode;
+        }
+        if (typeof state.autoPickCount === 'number' && document.activeElement !== randomCountInput) {
+          randomCountInput.value = String(state.autoPickCount);
         }
         if (typeof state.shuffleMode === 'boolean') {
           shuffleMode = state.shuffleMode;
@@ -971,7 +1115,6 @@
         }
         renderAutoModeUi(autoMode, state.autoStatus || '');
 
-        // Cập nhật cài đặt giọng đọc & âm thanh
         if (typeof state.voiceEnabled === 'boolean') {
           if (voiceEnabled && !state.voiceEnabled) {
             stopAllSpeech();
@@ -983,22 +1126,29 @@
         }
         updateAudioControlButtons();
 
-        // Cập nhật danh sách nút câu hỏi & ngân hàng câu hỏi
         if (Array.isArray(state.questionsMeta)) {
-          questionBankTitle.textContent = `5. Ngân hàng câu hỏi (${state.questionsMeta.length} câu)`;
+          bankTabBtn.textContent = `Ngân hàng câu hỏi (${state.questionsMeta.length})`;
           questionButtonsGrid.innerHTML = state.questionsMeta
             .map(
               (q) =>
-                `<button type="button" class="btn btn-secondary ${state.currentQuestionIndex === q.index ? 'is-active' : ''}" data-q-index="${q.index}">Phát Câu ${q.index + 1}</button>`
+                `<button type="button" class="btn btn-secondary btn-sm ${state.currentQuestionIndex === q.index ? 'is-active' : ''}" data-q-index="${q.index}" title="${escapeHtml(q.question)}">Phát Câu ${q.index + 1}</button>`
             )
             .join('');
 
-          questionPreviewList.innerHTML = state.questionsMeta
-            .map(
-              (q) =>
-                `<div class="question-preview-item" title="${escapeHtml(q.question)}"><strong>Câu ${q.index + 1} (${escapeHtml(q.topic)}):</strong> ${escapeHtml(q.question)}</div>`
-            )
-            .join('');
+          const activeQ =
+            state.currentQuestionIndex !== null && state.questionsMeta[state.currentQuestionIndex]
+              ? state.questionsMeta[state.currentQuestionIndex]
+              : state.questionsMeta[0];
+
+          if (activeQ) {
+            const label =
+              state.currentQuestionIndex !== null
+                ? `Đang chọn Câu ${activeQ.index + 1} (${activeQ.topic})`
+                : `Sẵn sàng Câu 1 (${activeQ.topic})`;
+            activeQuestionPreview.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(activeQ.question)}`;
+          } else {
+            activeQuestionPreview.textContent = 'Chưa có câu hỏi nào trong ngân hàng.';
+          }
 
           questionBankList.innerHTML = state.questionsMeta
             .map((q) => {
@@ -1008,8 +1158,8 @@
               return `
                 <div class="bank-item">
                   <div class="bank-item-info">
-                    <div class="bank-item-title">Câu ${q.index + 1} (${escapeHtml(q.topic)}): ${escapeHtml(q.question)}</div>
-                    <div class="bank-item-sub">${optsSummary} · <strong style="color:#34d399;">Đáp án đúng: ${escapeHtml(q.correctAnswer || '')}</strong></div>
+                    <div class="bank-item-title" title="${escapeHtml(q.question)}">Câu ${q.index + 1} (${escapeHtml(q.topic)}): ${escapeHtml(q.question)}</div>
+                    <div class="bank-item-sub">${optsSummary} · <strong style="color:#34d399;">Đúng: ${escapeHtml(q.correctAnswer || '')}</strong></div>
                   </div>
                   <div class="bank-item-actions">
                     <button type="button" class="btn btn-secondary btn-sm" data-play-q="${q.index}">Phát</button>
@@ -1022,7 +1172,7 @@
         }
       }
 
-      // 1. Kết nối TikTok Live & Chọn ngẫu nhiên thí sinh
+      // 1. Kết nối TikTok & Tuyển thí sinh
       tiktokConnectForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const username = tiktokUsernameInput.value.trim();
@@ -1034,8 +1184,14 @@
       });
 
       pickRandomBtn.addEventListener('click', () => {
-        const count = Number(randomCountInput.value) || 15;
+        const count = Number(randomCountInput.value) || 16;
         socket.emit('pick_random_players', { count });
+      });
+
+      randomCountInput.addEventListener('change', () => {
+        const pickCount = Math.max(1, Math.min(100, Number(randomCountInput.value) || 16));
+        randomCountInput.value = String(pickCount);
+        socket.emit('set_auto_mode', { pickCount });
       });
 
       toggleRosterLockBtn.addEventListener('click', () => {
@@ -1047,7 +1203,20 @@
         socket.emit('clear_commenters');
       });
 
-      // 2. Phát Câu 1..N, Chốt quán quân & Reset
+      copyObsUrlBtn.addEventListener('click', async () => {
+        const obsUrl = `${window.location.origin}/overlay`;
+        try {
+          await navigator.clipboard.writeText(obsUrl);
+          copyObsUrlBtn.textContent = 'Đã copy link OBS';
+        } catch {
+          copyObsUrlBtn.textContent = obsUrl;
+        }
+        setTimeout(() => {
+          copyObsUrlBtn.textContent = 'Copy link OBS';
+        }, 2000);
+      });
+
+      // 2. Phát câu hỏi & Tiebreak & Reset
       questionButtonsGrid.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-q-index]');
         if (!btn) return;
@@ -1055,7 +1224,27 @@
         socket.emit('start_question', { questionIndex: idx });
       });
 
-      // 5. Quản lý ngân hàng câu hỏi
+      playRandomQuestionBtn.addEventListener('click', () => {
+        socket.emit('start_random_question');
+      });
+
+      toggleShuffleModeBtn.addEventListener('click', () => {
+        socket.emit('set_shuffle_mode', { enabled: !shuffleMode });
+      });
+
+      tiebreakFastestBtn.addEventListener('click', () => {
+        socket.emit('declare_tiebreak_winner', { mode: 'fastest' });
+      });
+
+      tiebreakRandomBtn.addEventListener('click', () => {
+        socket.emit('declare_tiebreak_winner', { mode: 'random' });
+      });
+
+      resetGameBtn.addEventListener('click', () => {
+        socket.emit('reset_game');
+      });
+
+      // 3. Ngân hàng câu hỏi & Nhập/Xuất file
       addQuestionForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const topic = qTopicInput.value.trim() || 'Kiến thức chung';
@@ -1104,14 +1293,6 @@
 
       resetDefaultQuestionsBtn.addEventListener('click', () => {
         socket.emit('reset_default_questions');
-      });
-
-      playRandomQuestionBtn.addEventListener('click', () => {
-        socket.emit('start_random_question');
-      });
-
-      toggleShuffleModeBtn.addEventListener('click', () => {
-        socket.emit('set_shuffle_mode', { enabled: !shuffleMode });
       });
 
       shuffleQuestionsBtn.addEventListener('click', () => {
@@ -1207,19 +1388,7 @@
         importFileStatus.textContent = message || (ok ? 'Nhập file thành công!' : 'Nhập file thất bại.');
       });
 
-      tiebreakFastestBtn.addEventListener('click', () => {
-        socket.emit('declare_tiebreak_winner', { mode: 'fastest' });
-      });
-
-      tiebreakRandomBtn.addEventListener('click', () => {
-        socket.emit('declare_tiebreak_winner', { mode: 'random' });
-      });
-
-      resetGameBtn.addEventListener('click', () => {
-        socket.emit('reset_game');
-      });
-
-      // 3. Giả lập 15 người bình luận A, B, C, D cách nhau 200ms
+      // 4. Test nhanh
       simulateChatBtn.addEventListener('click', () => {
         if (isSimulating) return;
         isSimulating = true;
@@ -1254,7 +1423,6 @@
         });
       });
 
-      // Giả lập 25 người bình luận trong phiên Live để test chọn ngẫu nhiên
       simulatePoolBtn.addEventListener('click', () => {
         if (isSimulating) return;
         isSimulating = true;
@@ -1276,13 +1444,13 @@
               simulateChatBtn.disabled = false;
               simulatePoolBtn.disabled = false;
               simulateStatusLine.textContent =
-                'Đã ghi nhận 25 người bình luận! Hãy nhấn "Chọn ngẫu nhiên từ bình luận" ở Thẻ 1.';
+                'Đã ghi nhận 25 người bình luận! Hãy nhấn "Chọn ngẫu nhiên từ bình luận" ở phía trên.';
             }
           }, i * 80);
         });
       });
 
-      // --- Hệ thống Âm thanh & Giọng đọc MC trên trang điều khiển ---
+      // --- Hệ thống Âm thanh & Giọng đọc MC trên tab điều khiển ---
       let audioCtx = null;
       let speechVoices = [];
       let speechQueue = [];
@@ -1382,6 +1550,13 @@
         playTone(987.77, 0.1, 0.24, 'sine', 0.11);
       }
 
+      function playInviteSfx() {
+        if (!soundEnabled) return;
+        playTone(587.33, 0, 0.16, 'triangle', 0.11);
+        playTone(783.99, 0.11, 0.18, 'triangle', 0.12);
+        playTone(1046.5, 0.22, 0.28, 'sine', 0.13);
+      }
+
       function loadVoices() {
         if (!('speechSynthesis' in window)) return;
         speechVoices = window.speechSynthesis.getVoices() || [];
@@ -1426,7 +1601,6 @@
         }
         const voices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices() || [];
         const viVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('vi'));
-        // Tuyệt đối không dùng giọng mặc định tiếng Anh nếu hệ điều hành không có giọng tiếng Việt
         if (!viVoice) {
           onDone();
           return;
@@ -1620,23 +1794,9 @@
         });
       });
 
-      function renderAutoModeUi(isAuto, statusText) {
-        if (isAuto) {
-          autoStatusLine.className = 'status-line connected';
-          autoStatusLine.textContent = statusText || 'Vận hành tự động: Đang bật';
-          toggleAutoModeBtn.className = 'btn btn-gold';
-          toggleAutoModeBtn.textContent = 'Tắt Tự động';
-        } else {
-          autoStatusLine.className = 'status-line';
-          autoStatusLine.textContent = 'Vận hành tự động: Đang tắt (điều khiển thủ công)';
-          toggleAutoModeBtn.className = 'btn btn-secondary';
-          toggleAutoModeBtn.textContent = 'Bật Tự động vận hành';
-        }
-      }
-
       toggleAutoModeBtn.addEventListener('click', () => {
         const nextAuto = !autoMode;
-        const pickCount = Number(randomCountInput.value) || 15;
+        const pickCount = Number(randomCountInput.value) || 16;
         const transitionSeconds = Number(autoTransitionSelect.value) || 9;
         socket.emit('set_auto_mode', { enabled: nextAuto, pickCount, transitionSeconds });
       });
@@ -1660,14 +1820,23 @@
         renderState(state);
       });
 
-      socket.on('auto_status', ({ autoMode: nextAuto, autoTransitionSeconds, autoStatus } = {}) => {
+      socket.on('auto_status', ({ autoMode: nextAuto, autoPickCount, autoTransitionSeconds, autoStatus } = {}) => {
         if (typeof nextAuto === 'boolean') {
           autoMode = nextAuto;
+        }
+        if (typeof autoPickCount === 'number' && document.activeElement !== randomCountInput) {
+          randomCountInput.value = String(autoPickCount);
         }
         if (typeof autoTransitionSeconds === 'number') {
           autoTransitionSelect.value = String(autoTransitionSeconds);
         }
         renderAutoModeUi(autoMode, autoStatus || '');
+      });
+
+      socket.on('auto_invite', ({ text } = {}) => {
+        if (!text) return;
+        playInviteSfx();
+        speakVietnamese(text, { priority: 'normal', rate: 1.02 });
       });
 
       socket.on('question_started', ({ questionIndex, question } = {}) => {

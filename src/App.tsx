@@ -158,7 +158,7 @@ export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [logs, setLogs] = useState<SystemLogEntry[]>([]);
   const [tiktokUsername, setTiktokUsername] = useState('');
-  const [randomCount, setRandomCount] = useState(15);
+  const [randomCount, setRandomCount] = useState(16);
   const [isSimulating, setIsSimulating] = useState(false);
   const [lastEventNotice, setLastEventNotice] = useState<string>('');
   const [waitlistBannerText, setWaitlistBannerText] = useState<string>('');
@@ -172,6 +172,8 @@ export default function App() {
   const [questionFormMsg, setQuestionFormMsg] = useState<{ text: string; isError: boolean } | null>(null);
   const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
   const [importFileMsg, setImportFileMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState<'logs' | 'bank' | 'test'>('logs');
+  const [copiedObsUrl, setCopiedObsUrl] = useState(false);
   const importFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const soundEnabled = gameState?.soundEnabled ?? true;
@@ -260,6 +262,13 @@ export default function App() {
       if (!soundEnabledRef.current) return;
       playTone(783.99, 0, 0.18, 'sine', 0.1);
       playTone(987.77, 0.1, 0.24, 'sine', 0.11);
+    }
+
+    function playInviteSfx() {
+      if (!soundEnabledRef.current) return;
+      playTone(587.33, 0, 0.16, 'triangle', 0.11);
+      playTone(783.99, 0.11, 0.18, 'triangle', 0.12);
+      playTone(1046.5, 0.22, 0.28, 'sine', 0.13);
     }
 
     function loadVoices() {
@@ -539,6 +548,12 @@ export default function App() {
       }
     );
 
+    socket.on('auto_invite', ({ text }: { text?: string } = {}) => {
+      if (!text) return;
+      playInviteSfx();
+      speakVietnamese(text, 'normal', 1.02);
+    });
+
     socket.on(
       'question_started',
       ({ questionIndex, question }: { questionIndex?: number; question?: string } = {}) => {
@@ -775,6 +790,17 @@ export default function App() {
       'high',
       1.0
     );
+  }
+
+  async function handleCopyObsUrl() {
+    const obsUrl = `${window.location.origin}/overlay`;
+    try {
+      await navigator.clipboard.writeText(obsUrl);
+      setCopiedObsUrl(true);
+      window.setTimeout(() => setCopiedObsUrl(false), 2000);
+    } catch {
+      setLastEventNotice(`Link OBS Overlay: ${obsUrl}`);
+    }
   }
 
   function handleAddQuestion(e: FormEvent) {
@@ -1152,173 +1178,200 @@ export default function App() {
     };
   }, [phase]);
 
+  const phaseLabel =
+    phase === 'QUESTION'
+      ? 'Đang hỏi'
+      : phase === 'REVEAL'
+        ? 'Công bố'
+        : phase === 'WINNER'
+          ? 'Quán quân'
+          : phase === 'GAME_OVER'
+            ? 'Kết thúc'
+            : 'Chờ phát câu';
+
   return (
-    <div className="min-h-screen bg-[#0b1120] text-slate-100">
-      {/* Top Bar Contract: 3 zones */}
-      <header className="flex items-center justify-between gap-8 border-b border-slate-800 bg-[#111827] px-6 py-3.5">
-        <a href="/" className="whitespace-nowrap shrink-0 text-lg font-extrabold tracking-tight text-slate-50">
-          Rung Chuông Vàng
-        </a>
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden flex flex-col bg-[#070b14] text-slate-100">
+      {/* Thanh điều khiển trên cùng: 1 dòng gọn */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-[#111827] px-5 py-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <a href="/" className="whitespace-nowrap shrink-0 text-base font-extrabold tracking-tight text-slate-50">
+            Rung Chuông Vàng
+          </a>
 
-        <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-400">
-          <a href="/admin" className="whitespace-nowrap shrink-0 hover:text-slate-100 transition-colors">
-            Trang Admin
-          </a>
-          <a href="/overlay" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap shrink-0 hover:text-slate-100 transition-colors">
-            Màn hình OBS
-          </a>
-          <span className="whitespace-nowrap shrink-0 text-slate-300">
-            {isSocketConnected ? 'Socket.io đã kết nối' : 'Đang kết nối Socket.io...'}
+          <form onSubmit={handleConnectTikTok} className="flex items-center gap-2">
+            <input
+              type="text"
+              value={tiktokUsername}
+              onChange={(e) => setTiktokUsername(e.target.value)}
+              placeholder="@username TikTok Live"
+              aria-label="TikTok Username"
+              className="min-h-[34px] w-44 rounded-lg border border-slate-700 bg-[#090f1d] px-3 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="min-h-[34px] whitespace-nowrap shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-500 transition-colors cursor-pointer"
+            >
+              Kết nối Live
+            </button>
+            {gameState?.tiktok.status === 'connected' || gameState?.tiktok.status === 'connecting' ? (
+              <button
+                type="button"
+                onClick={handleDisconnectTikTok}
+                className="min-h-[34px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Ngắt
+              </button>
+            ) : null}
+          </form>
+
+          <span
+            className={`text-xs font-semibold whitespace-nowrap ${
+              gameState?.tiktok.status === 'connected'
+                ? 'text-emerald-400'
+                : gameState?.tiktok.status === 'connecting'
+                  ? 'text-amber-400'
+                  : gameState?.tiktok.status === 'error'
+                    ? 'text-red-400'
+                    : 'text-slate-400'
+            }`}
+          >
+            {gameState?.tiktok.status === 'connected'
+              ? `Live @${gameState.tiktok.username}`
+              : gameState?.tiktok.status === 'connecting'
+                ? `Đang kết nối @${gameState.tiktok.username}...`
+                : gameState?.tiktok.status === 'error'
+                  ? `Lỗi: ${gameState.tiktok.errorMessage}`
+                  : isSocketConnected
+                    ? 'Chưa kết nối Live'
+                    : 'Đang kết nối server...'}
           </span>
-        </nav>
+        </div>
 
-        <a
-          href="/overlay"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors"
-        >
-          Mở Overlay 1080×1920
-        </a>
+        <div className="hidden xl:flex items-center gap-2.5 text-xs text-slate-400 font-mono-tabular whitespace-nowrap">
+          <span>
+            Trên sàn: <strong className="text-slate-100">{remainingCount} / {totalCount}</strong>
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            Bình luận: <strong className="text-slate-100">{gameState?.liveCommentersCount ?? 0}</strong>
+          </span>
+          <span aria-hidden="true">·</span>
+          <strong className="text-amber-300">{phaseLabel}</strong>
+          <span aria-hidden="true">·</span>
+          <strong className="text-slate-100">{timeLeft}s</strong>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleToggleVoice}
+            className={`inline-flex min-h-[34px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer ${
+              voiceEnabled
+                ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+            {voiceEnabled ? 'Giọng đọc: Bật' : 'Giọng đọc: Tắt'}
+          </button>
+          <button
+            type="button"
+            onClick={handleToggleSound}
+            className={`inline-flex min-h-[34px] items-center whitespace-nowrap shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold transition-colors cursor-pointer ${
+              soundEnabled
+                ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            {soundEnabled ? 'Âm thanh: Bật' : 'Âm thanh: Tắt'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopyObsUrl}
+            className="inline-flex min-h-[34px] items-center whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+          >
+            {copiedObsUrl ? 'Đã copy link OBS' : 'Copy link OBS'}
+          </button>
+          <button
+            type="button"
+            onClick={handleResetGame}
+            className="inline-flex min-h-[34px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-red-600 px-3 py-1 text-xs font-bold text-white hover:bg-red-500 transition-colors cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reset Ván Mới
+          </button>
+        </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1440px] grid-cols-1 gap-6 p-6 lg:grid-cols-12">
-        {/* Cột trái: Điều khiển thời gian thực */}
-        <section className="flex flex-col gap-5 lg:col-span-5">
-          {/* Thẻ 1: Kết nối TikTok & Chọn ngẫu nhiên */}
-          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-50">1. Kết nối TikTok Live & Tuyển thí sinh</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Ghi nhận bình luận trong phiên Live và chọn ngẫu nhiên thí sinh lên bàn học.
-              </p>
-            </div>
-
-            <form onSubmit={handleConnectTikTok} className="flex flex-wrap gap-2.5">
-              <input
-                type="text"
-                value={tiktokUsername}
-                onChange={(e) => setTiktokUsername(e.target.value)}
-                placeholder="Nhập TikTok username (vd: @tenkenh)"
-                className="min-h-[42px] flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="min-h-[42px] whitespace-nowrap shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 transition-colors cursor-pointer"
-              >
-                Kết nối TikTok Live
-              </button>
-              {gameState?.tiktok.status === 'connected' || gameState?.tiktok.status === 'connecting' ? (
+      <main className="flex-1 min-h-0 grid grid-cols-1 gap-4 p-4 lg:grid-cols-12">
+        {/* Cột trái: Điều khiển ghim trên + 3 Tab con bên dưới */}
+        <section className="flex flex-col gap-3 min-h-0 lg:col-span-6">
+          {/* Phần ghim trên: Thao tác dùng liên tục khi đang Live */}
+          <article className="rounded-xl border border-slate-800 bg-[#0f172a] p-3.5 flex flex-col gap-2.5 shrink-0">
+            {/* Hàng 1: Tuyển thí sinh */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-slate-200">Thí sinh:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={randomCount}
+                  onChange={(e) => {
+                    const nextVal = Math.max(1, Math.min(100, Number(e.target.value) || 16));
+                    setRandomCount(nextVal);
+                    socketRef.current?.emit('set_auto_mode', { pickCount: nextVal });
+                  }}
+                  aria-label="Số lượng thí sinh chọn ngẫu nhiên"
+                  className="min-h-[34px] w-16 rounded-lg border border-slate-700 bg-[#090f1d] px-2.5 text-xs font-mono-tabular text-slate-100 focus:border-amber-500 focus:outline-none"
+                />
                 <button
                   type="button"
-                  onClick={handleDisconnectTikTok}
-                  className="min-h-[42px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-                >
-                  Ngắt
-                </button>
-              ) : null}
-            </form>
-
-            <div className="text-xs font-semibold text-slate-400">
-              {gameState?.tiktok.status === 'connected' ? (
-                <span className="text-emerald-400">Đã kết nối Live @{gameState.tiktok.username}</span>
-              ) : gameState?.tiktok.status === 'connecting' ? (
-                <span className="text-amber-400">Đang kết nối tới @{gameState.tiktok.username}...</span>
-              ) : gameState?.tiktok.status === 'error' ? (
-                <span className="text-red-400">Lỗi: {gameState.tiktok.errorMessage}</span>
-              ) : (
-                <span>Trạng thái TikTok: Chưa kết nối</span>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-              <span className="text-sm text-slate-300">
-                Người đã bình luận:{' '}
-                <strong className="font-mono-tabular text-amber-400">
-                  {gameState?.liveCommentersCount ?? 0}
-                </strong>
-              </span>
-              <button
-                type="button"
-                onClick={handleClearPool}
-                className="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
-              >
-                Xóa pool
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-2.5">
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={randomCount}
-                onChange={(e) => setRandomCount(Number(e.target.value) || 15)}
-                aria-label="Số lượng thí sinh chọn ngẫu nhiên"
-                className="min-h-[42px] w-24 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm font-mono-tabular text-slate-100 focus:border-amber-500 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handlePickRandom}
-                className="inline-flex min-h-[42px] items-center gap-2 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
-              >
-                <Shuffle className="h-4 w-4" />
-                Chọn ngẫu nhiên từ bình luận
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleRosterLock}
-                className="min-h-[42px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-              >
-                {gameState?.rosterLocked ? 'Mở nhận tự do' : 'Khóa sàn đấu'}
-              </button>
-            </div>
-          </article>
-
-          {/* Thẻ 2: Điều khiển câu hỏi & Reset */}
-          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-50">2. Điều khiển trò chơi</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Phát câu hỏi (15s đếm ngược). Người cuối cùng còn lại trên sàn là Quán quân.
-              </p>
-            </div>
-
-            <div className="grid max-h-44 grid-cols-3 gap-2.5 overflow-y-auto pr-1">
-              {(gameState?.questionsMeta && gameState.questionsMeta.length > 0
-                ? gameState.questionsMeta.map((q) => q.index)
-                : [0, 1, 2]
-              ).map((idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleStartQuestion(idx)}
-                  className={`min-h-[42px] rounded-lg border px-3 py-2 text-sm font-bold transition-colors cursor-pointer ${
-                    gameState?.currentQuestionIndex === idx
-                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
-                      : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
-                  }`}
-                >
-                  Phát Câu {idx + 1}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-800 pt-3">
-              <span className="text-xs text-slate-400">Tự động trộn thứ tự câu hỏi mỗi khi bắt đầu ván mới</span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handlePlayRandomQuestion}
-                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                  onClick={handlePickRandom}
+                  className="inline-flex min-h-[34px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
                 >
                   <Shuffle className="h-3.5 w-3.5" />
-                  Phát ngẫu nhiên 1 câu
+                  Chọn ngẫu nhiên từ bình luận
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleRosterLock}
+                  className="min-h-[34px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  {gameState?.rosterLocked ? 'Mở nhận tự do' : 'Khóa sàn đấu'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearPool}
+                  className="min-h-[34px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                >
+                  Xóa pool
+                </button>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-400">
+                {gameState?.rosterLocked ? 'Đã khóa danh sách thí sinh' : 'Nhận tự do qua bình luận A, B, C, D'}
+              </span>
+            </div>
+
+            {/* Hàng 2: Vận hành tự động & Mix */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800 pt-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-bold text-slate-200">Vận hành:</span>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoMode}
+                  className={`min-h-[34px] whitespace-nowrap shrink-0 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                    gameState?.autoMode
+                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                      : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  {gameState?.autoMode ? 'Tắt Tự động' : 'Bật Tự động'}
                 </button>
                 <button
                   type="button"
                   onClick={handleToggleShuffleMode}
-                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                  className={`inline-flex min-h-[34px] items-center gap-1 whitespace-nowrap shrink-0 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
                     gameState?.shuffleMode !== false
                       ? 'border-amber-500 bg-amber-500/15 text-amber-300'
                       : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
@@ -1326,27 +1379,13 @@ export default function App() {
                 >
                   {gameState?.shuffleMode !== false ? 'Mix ván mới: Bật' : 'Mix ván mới: Tắt'}
                 </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-              <span
-                className={`text-xs font-semibold ${
-                  gameState?.autoMode ? 'text-emerald-400' : 'text-slate-400'
-                }`}
-              >
-                {gameState?.autoMode
-                  ? gameState.autoStatus || 'Vận hành tự động: Đang bật'
-                  : 'Vận hành tự động: Đang tắt (điều khiển thủ công)'}
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
                 <label className="inline-flex items-center gap-1.5 text-xs text-slate-400">
                   <span>Nghỉ chuyển câu:</span>
                   <select
                     value={gameState?.autoTransitionSeconds ?? 9}
                     onChange={(e) => handleChangeAutoTransition(Number(e.target.value) || 9)}
                     aria-label="Thời gian nghỉ chuyển câu tiếp theo"
-                    className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
+                    className="min-h-[34px] rounded-lg border border-slate-700 bg-[#090f1d] px-2 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
                   >
                     <option value={6}>6s (Nhanh)</option>
                     <option value={9}>9s (Khuyên dùng)</option>
@@ -1354,373 +1393,394 @@ export default function App() {
                     <option value={15}>15s (Chậm)</option>
                   </select>
                 </label>
+              </div>
+              <span
+                className={`text-[11px] font-semibold ${
+                  gameState?.autoMode ? 'text-emerald-400' : 'text-slate-400'
+                }`}
+              >
+                {gameState?.autoMode
+                  ? gameState.autoStatus || 'Tự động: Đang bật'
+                  : 'Tự động: Tắt (thủ công)'}
+              </span>
+            </div>
+
+            {/* Hàng 3: Phát câu hỏi & Tiebreak */}
+            <div className="flex flex-col gap-2 border-t border-slate-800 pt-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-slate-200">Phát câu hỏi:</span>
+                  <button
+                    type="button"
+                    onClick={handlePlayRandomQuestion}
+                    className="inline-flex min-h-[32px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                    Phát ngẫu nhiên 1 câu
+                  </button>
+                </div>
+
+                {phase === 'REVEAL' && remainingCount > 1 ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-amber-300">
+                      Còn {remainingCount} người — chốt Quán quân:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleTiebreakWinner('fastest')}
+                      className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-slate-950 hover:bg-amber-400 cursor-pointer"
+                    >
+                      Nhanh nhất
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleTiebreakWinner('random')}
+                      className="rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer"
+                    >
+                      Bốc thăm
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="grid max-h-28 grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
+                {(gameState?.questionsMeta && gameState.questionsMeta.length > 0
+                  ? gameState.questionsMeta.map((q) => q.index)
+                  : [0, 1, 2]
+                ).map((idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleStartQuestion(idx)}
+                    className={`min-h-[34px] rounded-lg border px-2 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                      gameState?.currentQuestionIndex === idx
+                        ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                        : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                    }`}
+                  >
+                    Phát Câu {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </article>
+
+          {/* Phần Tab con bên dưới: Nhật ký Live | Ngân hàng câu hỏi | Test nhanh & Âm thanh */}
+          <article className="flex-1 min-h-[280px] flex flex-col overflow-hidden rounded-xl border border-slate-800 bg-[#0f172a]">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-[#111827] px-3 py-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Khu vực quản lý chi tiết">
                 <button
                   type="button"
-                  onClick={handleToggleAutoMode}
-                  className={`min-h-[38px] whitespace-nowrap shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                    gameState?.autoMode
-                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
-                      : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  role="tab"
+                  aria-selected={activeSubTab === 'logs'}
+                  onClick={() => setActiveSubTab('logs')}
+                  className={`min-h-[32px] whitespace-nowrap rounded-lg border px-3 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                    activeSubTab === 'logs'
+                      ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
                   }`}
                 >
-                  {gameState?.autoMode ? 'Tắt Tự động' : 'Bật Tự động vận hành'}
+                  Nhật ký Live
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSubTab === 'bank'}
+                  onClick={() => setActiveSubTab('bank')}
+                  className={`min-h-[32px] whitespace-nowrap rounded-lg border px-3 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                    activeSubTab === 'bank'
+                      ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                  }`}
+                >
+                  Ngân hàng câu hỏi ({gameState?.questionsMeta?.length ?? 0})
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSubTab === 'test'}
+                  onClick={() => setActiveSubTab('test')}
+                  className={`min-h-[32px] whitespace-nowrap rounded-lg border px-3 py-1 text-xs font-bold transition-colors cursor-pointer ${
+                    activeSubTab === 'test'
+                      ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/60 hover:text-slate-100'
+                  }`}
+                >
+                  Test nhanh &amp; Âm thanh
                 </button>
               </div>
             </div>
 
-            {phase === 'REVEAL' && remainingCount > 1 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-                <span className="text-xs font-semibold text-amber-300">
-                  Còn {remainingCount} người trụ hạng — chốt Quán quân:
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleTiebreakWinner('fastest')}
-                    className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 cursor-pointer"
-                  >
-                    Nhanh nhất
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleTiebreakWinner('random')}
-                    className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer"
-                  >
-                    Bốc thăm
-                  </button>
+            {activeSubTab === 'logs' ? (
+              <div className="flex-1 min-h-0 flex flex-col p-3.5">
+                <div
+                  ref={logContainerRef}
+                  role="log"
+                  aria-live="polite"
+                  className="flex-1 min-h-[180px] overflow-y-auto rounded-lg border border-slate-800 bg-[#070b14] p-3 font-mono-tabular text-xs leading-relaxed flex flex-col gap-1.5"
+                >
+                  {logs.length === 0 ? (
+                    <div className="text-slate-500">Đang chờ sự kiện từ server...</div>
+                  ) : (
+                    logs.map((entry) => (
+                      <div key={entry.id} className="flex gap-2.5">
+                        <span className="shrink-0 text-slate-500">[{entry.timestamp}]</span>
+                        <span
+                          className={
+                            entry.level === 'success'
+                              ? 'text-emerald-400'
+                              : entry.level === 'warning'
+                                ? 'text-amber-300'
+                                : entry.level === 'error'
+                                  ? 'text-red-400'
+                                  : 'text-slate-200'
+                          }
+                        >
+                          {entry.message}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
-              <span className="text-xs text-slate-400">Giọng đọc MC &amp; âm thanh (ẩn khỏi màn hình Live)</span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleToggleVoice}
-                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                    voiceEnabled
-                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
-                      : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-                  {voiceEnabled ? 'Giọng đọc: Bật' : 'Giọng đọc: Tắt'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleSound}
-                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
-                    soundEnabled
-                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
-                      : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {soundEnabled ? 'Âm thanh: Bật' : 'Âm thanh: Tắt'}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTestVoice}
-                  className="inline-flex min-h-[36px] items-center whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
-                >
-                  Thử giọng đọc
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-3">
-              <span className="text-xs text-slate-400">Xóa thí sinh trên sàn để bắt đầu ván mới</span>
-              <button
-                type="button"
-                onClick={handleResetGame}
-                className="inline-flex min-h-[40px] items-center gap-2 whitespace-nowrap shrink-0 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500 transition-colors cursor-pointer"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Ván Mới
-              </button>
-            </div>
-          </article>
-
-          {/* Thẻ 3: Test nhanh */}
-          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-3">
-            <div>
-              <h2 className="text-base font-bold text-slate-50">3. Test nhanh (Giả lập bình luận)</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Gửi 15 bình luận A/B/C/D cách nhau 200ms hoặc tạo nhanh 25 người bình luận Live.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              <button
-                type="button"
-                disabled={isSimulating}
-                onClick={handleSimulate15Answers}
-                className="min-h-[42px] whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                Giả lập 15 người bình luận
-              </button>
-              <button
-                type="button"
-                disabled={isSimulating}
-                onClick={handleSimulate25Pool}
-                className="min-h-[42px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                Giả lập 25 bình luận Live
-              </button>
-            </div>
-          </article>
-
-          {/* Thẻ 4: Nhật ký hệ thống */}
-          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-3">
-            <h2 className="text-base font-bold text-slate-50">4. Nhật ký hệ thống</h2>
-            <div
-              ref={logContainerRef}
-              role="log"
-              aria-live="polite"
-              className="h-52 overflow-y-auto rounded-lg border border-slate-800 bg-[#070b14] p-3 font-mono-tabular text-xs leading-relaxed flex flex-col gap-1.5"
-            >
-              {logs.length === 0 ? (
-                <div className="text-slate-500">Đang chờ sự kiện từ server...</div>
-              ) : (
-                logs.map((entry) => (
-                  <div key={entry.id} className="flex gap-2.5">
-                    <span className="shrink-0 text-slate-500">[{entry.timestamp}]</span>
-                    <span
-                      className={
-                        entry.level === 'success'
-                          ? 'text-emerald-400'
-                          : entry.level === 'warning'
-                            ? 'text-amber-300'
-                            : entry.level === 'error'
-                              ? 'text-red-400'
-                              : 'text-slate-200'
-                      }
+            {activeSubTab === 'bank' ? (
+              <div className="flex-1 min-h-0 overflow-y-auto p-3.5 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-[#070b14] p-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={importMode}
+                      onChange={(e) => setImportMode(e.target.value === 'replace' ? 'replace' : 'append')}
+                      aria-label="Chế độ nhập file câu hỏi"
+                      className="min-h-[32px] rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
                     >
-                      {entry.message}
-                    </span>
+                      <option value="append">Thêm vào bộ hiện có</option>
+                      <option value="replace">Thay thế toàn bộ</option>
+                    </select>
+                    <input
+                      ref={importFileInputRef}
+                      type="file"
+                      accept=".json,.csv,.txt,.tsv"
+                      onChange={handleImportQuestionsFile}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (importFileInputRef.current) {
+                          importFileInputRef.current.value = '';
+                          importFileInputRef.current.click();
+                        }
+                      }}
+                      className="inline-flex min-h-[32px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Nhập file
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleShuffleQuestions}
+                      className="inline-flex min-h-[32px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+                    >
+                      <Shuffle className="h-3.5 w-3.5" />
+                      Trộn thứ tự
+                    </button>
                   </div>
-                ))
-              )}
-            </div>
-          </article>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handleDownloadSampleTemplate}
+                      className="inline-flex min-h-[32px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                    >
+                      <Download className="h-3 w-3" />
+                      Mẫu TXT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportQuestionsJson}
+                      className="inline-flex min-h-[32px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                    >
+                      <Download className="h-3 w-3" />
+                      Xuất JSON
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDefaultQuestions}
+                      className="min-h-[32px] rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                    >
+                      Mặc định (3 câu)
+                    </button>
+                  </div>
+                  {importFileMsg ? (
+                    <div
+                      className={`w-full text-xs font-semibold ${
+                        importFileMsg.isError ? 'text-red-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {importFileMsg.text}
+                    </div>
+                  ) : null}
+                </div>
 
-          {/* Thẻ 5: Ngân hàng câu hỏi */}
-          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-bold text-slate-50">
-                  5. Ngân hàng câu hỏi ({gameState?.questionsMeta?.length ?? 0} câu)
-                </h2>
-                <p className="mt-1 text-xs text-slate-400">
-                  Thêm từng câu hoặc nhập cả bộ từ file (.JSON, .CSV, .TXT) và trộn ngẫu nhiên thứ tự.
+                <form onSubmit={handleAddQuestion} className="flex flex-col gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
+                    <input
+                      type="text"
+                      value={newTopic}
+                      onChange={(e) => setNewTopic(e.target.value)}
+                      placeholder="Chủ đề"
+                      className="min-h-[36px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newQuestion}
+                      onChange={(e) => setNewQuestion(e.target.value)}
+                      placeholder="Nhập nội dung câu hỏi mới..."
+                      className="min-h-[36px] sm:col-span-2 rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <div className="flex gap-1.5">
+                      <select
+                        id="reactCorrectSelect"
+                        value={newCorrect}
+                        onChange={(e) => setNewCorrect(e.target.value as AnswerChoice)}
+                        aria-label="Đáp án đúng"
+                        className="min-h-[36px] flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
+                      >
+                        {OPTION_KEYS.map((k) => (
+                          <option key={k} value={k}>
+                            Đáp án {k}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="min-h-[36px] whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                      >
+                        + Thêm
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <input
+                      type="text"
+                      value={newOptA}
+                      onChange={(e) => setNewOptA(e.target.value)}
+                      placeholder="Đáp án A"
+                      className="min-h-[34px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newOptB}
+                      onChange={(e) => setNewOptB(e.target.value)}
+                      placeholder="Đáp án B"
+                      className="min-h-[34px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newOptC}
+                      onChange={(e) => setNewOptC(e.target.value)}
+                      placeholder="Đáp án C"
+                      className="min-h-[34px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={newOptD}
+                      onChange={(e) => setNewOptD(e.target.value)}
+                      placeholder="Đáp án D"
+                      className="min-h-[34px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {questionFormMsg ? (
+                    <div
+                      className={`text-xs font-semibold ${
+                        questionFormMsg.isError ? 'text-red-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {questionFormMsg.text}
+                    </div>
+                  ) : null}
+                </form>
+
+                <div className="flex flex-col gap-1.5 border-t border-slate-800 pt-2.5">
+                  {(gameState?.questionsMeta ?? []).map((q) => (
+                    <div
+                      key={q.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-[#070b14] px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold text-slate-100" title={q.question}>
+                          Câu {q.index + 1} ({q.topic}): {q.question}
+                        </div>
+                        <div className="truncate text-[11px] text-slate-400">
+                          Đáp án đúng: <strong className="text-emerald-400">{q.correctAnswer ?? '—'}</strong>
+                          {q.options ? ` · ${q.options[q.correctAnswer ?? 'A']}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleStartQuestion(q.index)}
+                          className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700 cursor-pointer"
+                        >
+                          Phát
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQuestion(q.index)}
+                          className="rounded-md bg-red-600/85 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-500 cursor-pointer"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {activeSubTab === 'test' ? (
+              <div className="flex-1 min-h-0 overflow-y-auto p-3.5 flex flex-col gap-3">
+                <p className="text-xs text-slate-400">
+                  Dùng để kiểm tra nhanh giao diện sân khấu, hiệu ứng pháo hoa và giọng đọc tiếng Việt trước khi phát Live.
+                </p>
+                <div className="flex flex-wrap gap-2.5">
+                  <button
+                    type="button"
+                    disabled={isSimulating}
+                    onClick={handleSimulate15Answers}
+                    className="min-h-[38px] whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3.5 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    Giả lập 15 người bình luận
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulating}
+                    onClick={handleSimulate25Pool}
+                    className="min-h-[38px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    Giả lập 25 bình luận Live
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestVoice}
+                    className="min-h-[38px] whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+                  >
+                    Thử giọng đọc MC
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Mẹo: Bấm &quot;Giả lập 25 bình luận Live&quot; rồi chọn ngẫu nhiên từ bình luận, sau đó phát câu hỏi và bấm &quot;Giả lập 15 người bình luận&quot;.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={handleResetDefaultQuestions}
-                className="shrink-0 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
-              >
-                Mặc định (3 câu)
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-slate-800 bg-[#070b14] p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={importMode}
-                  onChange={(e) => setImportMode(e.target.value === 'replace' ? 'replace' : 'append')}
-                  aria-label="Chế độ nhập file câu hỏi"
-                  className="min-h-[36px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
-                >
-                  <option value="append">Thêm vào bộ hiện có</option>
-                  <option value="replace">Thay thế toàn bộ</option>
-                </select>
-                <input
-                  ref={importFileInputRef}
-                  type="file"
-                  accept=".json,.csv,.txt,.tsv"
-                  onChange={handleImportQuestionsFile}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (importFileInputRef.current) {
-                      importFileInputRef.current.value = '';
-                      importFileInputRef.current.click();
-                    }
-                  }}
-                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Nhập file (.JSON / .CSV / .TXT)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleShuffleQuestions}
-                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
-                >
-                  <Shuffle className="h-3.5 w-3.5" />
-                  Trộn thứ tự bộ câu
-                </button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleDownloadSampleTemplate}
-                  className="inline-flex min-h-[34px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
-                >
-                  <Download className="h-3 w-3" />
-                  Tải mẫu (.TXT)
-                </button>
-                <button
-                  type="button"
-                  onClick={handleExportQuestionsJson}
-                  className="inline-flex min-h-[34px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
-                >
-                  <Download className="h-3 w-3" />
-                  Xuất JSON
-                </button>
-              </div>
-              <div className="w-full text-[11px] text-slate-400">
-                Mẫu TXT: <code className="text-slate-300">Câu 1: ...</code> · <code className="text-slate-300">A. ... B. ... C. ... D. ...</code> · <code className="text-slate-300">Đáp án: B</code> (hoặc CSV 7 cột: Chủ đề, Câu hỏi, A, B, C, D, Đáp án đúng).
-              </div>
-              {importFileMsg ? (
-                <div
-                  className={`w-full text-xs font-semibold ${
-                    importFileMsg.isError ? 'text-red-400' : 'text-emerald-400'
-                  }`}
-                >
-                  {importFileMsg.text}
-                </div>
-              ) : null}
-            </div>
-
-            <form onSubmit={handleAddQuestion} className="flex flex-col gap-2.5">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <input
-                  type="text"
-                  value={newTopic}
-                  onChange={(e) => setNewTopic(e.target.value)}
-                  placeholder="Chủ đề (vd: Đố vui)"
-                  className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={newQuestion}
-                  onChange={(e) => setNewQuestion(e.target.value)}
-                  placeholder="Nhập nội dung câu hỏi..."
-                  className="min-h-[40px] sm:col-span-2 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={newOptA}
-                  onChange={(e) => setNewOptA(e.target.value)}
-                  placeholder="Đáp án A"
-                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={newOptB}
-                  onChange={(e) => setNewOptB(e.target.value)}
-                  placeholder="Đáp án B"
-                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={newOptC}
-                  onChange={(e) => setNewOptC(e.target.value)}
-                  placeholder="Đáp án C"
-                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={newOptD}
-                  onChange={(e) => setNewOptD(e.target.value)}
-                  placeholder="Đáp án D"
-                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2">
-                  <label htmlFor="reactCorrectSelect" className="text-xs font-semibold text-slate-300">
-                    Đáp án đúng:
-                  </label>
-                  <select
-                    id="reactCorrectSelect"
-                    value={newCorrect}
-                    onChange={(e) => setNewCorrect(e.target.value as AnswerChoice)}
-                    className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-sm font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
-                  >
-                    {OPTION_KEYS.map((k) => (
-                      <option key={k} value={k}>
-                        Đáp án {k}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  type="submit"
-                  className="min-h-[38px] whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
-                >
-                  + Thêm câu hỏi
-                </button>
-              </div>
-
-              {questionFormMsg ? (
-                <div
-                  className={`text-xs font-semibold ${
-                    questionFormMsg.isError ? 'text-red-400' : 'text-emerald-400'
-                  }`}
-                >
-                  {questionFormMsg.text}
-                </div>
-              ) : null}
-            </form>
-
-            <div className="flex max-h-60 flex-col gap-2 overflow-y-auto border-t border-slate-800 pt-3">
-              {(gameState?.questionsMeta ?? []).map((q) => (
-                <div
-                  key={q.id}
-                  className="flex items-center justify-between gap-2.5 rounded-lg border border-slate-800 bg-[#070b14] px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-bold text-slate-100" title={q.question}>
-                      Câu {q.index + 1} ({q.topic}): {q.question}
-                    </div>
-                    <div className="truncate text-[11px] text-slate-400">
-                      Đáp án đúng: <strong className="text-emerald-400">{q.correctAnswer ?? '—'}</strong>
-                      {q.options ? ` · ${q.options[q.correctAnswer ?? 'A']}` : ''}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => handleStartQuestion(q.index)}
-                      className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700 cursor-pointer"
-                    >
-                      Phát
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteQuestion(q.index)}
-                      className="rounded-md bg-red-600/85 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-500 cursor-pointer"
-                    >
-                      Xóa
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            ) : null}
           </article>
         </section>
 
-        {/* Cột phải: Màn hình Rung Chuông Vàng thời gian thực (kiểu lớp học) */}
-        <section className="relative overflow-hidden flex flex-col gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#06112d] via-[#0a1c47] to-[#050d24] p-6 lg:col-span-7">
+        {/* Cột phải: Màn hình Lớp Học Rung Chuông Vàng thời gian thực */}
+        <section className="relative overflow-y-auto flex flex-col gap-3.5 rounded-2xl border-4 border-[#d97706] bg-gradient-to-b from-[#fffdf7] via-[#fef3dc] to-[#f3dfc0] p-5 text-slate-900 lg:col-span-6">
           {phase === 'WINNER' ? (
             <canvas
               ref={fireworksCanvasRef}
@@ -1728,111 +1788,122 @@ export default function App() {
               aria-hidden="true"
             />
           ) : null}
-          {/* Header */}
-          <div className="flex items-center justify-between gap-4 border-b border-amber-400/20 pb-4">
+
+          {/* Header lớp học */}
+          <div className="flex items-center justify-between gap-4 border-b border-amber-300/60 pb-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-full border border-amber-400/50 bg-amber-400/15 text-amber-300">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-amber-300 to-amber-500 text-amber-950 shadow-sm">
                 <Bell className="h-5 w-5" />
               </div>
               <div>
-                <h1 className="font-display-royal text-2xl font-black tracking-wide text-amber-300">
+                <h1 className="text-xl font-extrabold tracking-tight text-amber-900">
                   RUNG CHUÔNG VÀNG
                 </h1>
-                <p className="text-xs font-medium text-slate-300">
-                  {lastEventNotice || 'Đồng bộ thời gian thực qua Socket.io Client'}
+                <p className="text-xs font-semibold text-slate-600">
+                  {lastEventNotice || 'Lớp học thi đấu trực tuyến qua TikTok Live'}
                 </p>
               </div>
             </div>
 
             <div className="text-right font-mono-tabular">
-              <div className="text-sm font-bold text-amber-300">
-                Còn {remainingCount} / {totalCount} người trên sàn
+              <div className="text-sm font-extrabold text-amber-900">
+                Còn {remainingCount} / {totalCount} bạn
               </div>
-              <div className="text-xs text-slate-400">Đã loại: {gameState?.stats.eliminated ?? 0}</div>
+              <div className="text-xs font-semibold text-slate-600">
+                Đã rời bàn: {gameState?.stats.eliminated ?? 0}
+              </div>
             </div>
           </div>
 
-          {/* Khung câu hỏi + Đếm ngược 15s */}
-          <div className="rounded-xl border border-amber-400/30 bg-[#0d2255]/90 p-5 flex flex-col gap-4">
+          {/* Bảng đen câu hỏi + Đồng hồ 15s */}
+          <div className="rounded-2xl border-[6px] border-[#92400e] bg-gradient-to-b from-[#165b42] to-[#0d3d2b] p-4 text-white shadow-md flex flex-col gap-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
+                <div className="text-xs font-extrabold tracking-wide text-yellow-300">
                   {gameState?.currentQuestion
                     ? `Câu hỏi ${String(gameState.currentQuestion.index + 1).padStart(2, '0')} / ${String(gameState.currentQuestion.total).padStart(2, '0')} · ${gameState.currentQuestion.topic}`
-                    : 'Phòng thi trực tuyến · Chờ phát câu hỏi'}
+                    : 'Lớp học trực tuyến · Chờ phát câu hỏi'}
                 </div>
-                <p className="mt-2 text-lg font-bold leading-snug text-white">
+                <p className="mt-1.5 text-base font-bold leading-snug text-white">
                   {gameState?.currentQuestion?.question ??
                     'Hãy chọn ngẫu nhiên thí sinh từ bình luận Live hoặc nhấn Phát Câu 1 để bắt đầu.'}
                 </p>
               </div>
 
               <div
-                className={`flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-full border-2 bg-slate-950/80 font-mono-tabular ${
+                className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-full border-4 bg-amber-50 font-mono-tabular ${
                   phase === 'QUESTION' && timeLeft <= 5
-                    ? 'border-red-500 text-red-300'
-                    : 'border-amber-400/60 text-amber-300'
+                    ? 'border-red-600 text-red-600'
+                    : 'border-amber-500 text-slate-900'
                 }`}
               >
-                <span className="text-xl font-extrabold leading-none">{timeLeft}</span>
-                <span className="text-[10px] font-semibold text-slate-400">giây</span>
+                <span className="text-lg font-extrabold leading-none">{timeLeft}</span>
+                <span className="text-[10px] font-bold text-slate-500">giây</span>
               </div>
             </div>
 
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-950/80 border border-amber-400/20">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/30">
               <div
                 className={`h-full w-full origin-left transition-transform duration-1000 linear ${
-                  phase === 'QUESTION' && timeLeft <= 5 ? 'bg-red-500' : 'bg-amber-400'
+                  phase === 'QUESTION' && timeLeft <= 5 ? 'bg-red-500' : 'bg-yellow-300'
                 }`}
                 style={{ transform: `scaleX(${progressRatio})` }}
               />
             </div>
 
-            {/* Lưới 2x2 Đáp án */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {/* Lưới 2x2 Thẻ Đáp án */}
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               {OPTION_KEYS.map((key) => {
                 const optionText = gameState?.currentQuestion?.options[key] ?? 'Đang chờ câu hỏi...';
                 const count = gameState?.stats.answerCounts[key] ?? 0;
                 const isCorrect = isEnded && gameState?.correctAnswer === key;
                 const isWrong = isEnded && gameState?.correctAnswer !== null && gameState?.correctAnswer !== key;
+                const keyBadgeClass =
+                  isCorrect
+                    ? 'bg-emerald-600 text-white'
+                    : key === 'A'
+                      ? 'bg-sky-600 text-white'
+                      : key === 'B'
+                        ? 'bg-orange-600 text-white'
+                        : key === 'C'
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-rose-600 text-white';
 
                 return (
                   <div
                     key={key}
-                    className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-all ${
+                    className={`flex items-center gap-2.5 rounded-xl border-2 border-b-4 px-3 py-2.5 transition-all ${
                       isCorrect
-                        ? 'border-emerald-400 bg-emerald-900/75 text-white'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-950'
                         : isWrong
-                          ? 'border-amber-400/20 bg-[#10265c]/60 opacity-45'
-                          : 'border-amber-400/30 bg-[#10265c]/90'
+                          ? 'border-slate-200 bg-white/85 opacity-45 text-slate-900'
+                          : 'border-slate-200 border-b-slate-300 bg-white text-slate-900'
                     }`}
                   >
                     <span
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg font-mono-tabular text-base font-extrabold ${
-                        isCorrect ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-400 text-slate-950'
-                      }`}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-mono-tabular text-sm font-extrabold ${keyBadgeClass}`}
                     >
                       {key}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-bold text-slate-50">{optionText}</div>
-                      <div className="font-mono-tabular text-xs text-slate-300">
+                      <div className="truncate text-xs font-extrabold text-slate-900">{optionText}</div>
+                      <div className="font-mono-tabular text-[11px] font-semibold text-slate-500">
                         {isCorrect ? `Đáp án đúng · ${count} lượt chọn` : `${count} lượt chọn`}
                       </div>
                     </div>
-                    {isCorrect ? <Check className="h-5 w-5 shrink-0 text-emerald-300" /> : null}
+                    {isCorrect ? <Check className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Sân khấu thí sinh kiểu lớp học */}
-          <div className="flex flex-1 flex-col gap-3 rounded-xl border border-amber-400/25 bg-[#060f28]/90 p-4">
-            <div className="flex items-center justify-between rounded-lg border-2 border-[#925420] bg-[#0a3126] px-4 py-2">
-              <div className="flex items-center gap-2 text-sm font-extrabold text-amber-100">
-                <Users className="h-4 w-4 text-amber-300" />
-                LỚP HỌC THI ĐẤU · SÂN KHẤU THÍ SINH
+          {/* Sân khấu bàn học lớp học */}
+          <div className="flex flex-1 flex-col gap-3 rounded-2xl border-2 border-[#d97706] bg-white/80 p-3.5">
+            <div className="flex items-center justify-between rounded-xl border-2 border-[#92400e] bg-[#165b42] px-3.5 py-2">
+              <div className="flex items-center gap-2 text-xs font-extrabold text-amber-100">
+                <Users className="h-4 w-4 text-yellow-300" />
+                LỚP HỌC THI ĐẤU · SÂN KHẤU HỌC SINH
               </div>
               <span className="font-mono-tabular text-xs font-bold text-emerald-200">
                 Chỗ ngồi: {remainingCount} còn thi / {totalCount} bàn
@@ -1842,19 +1913,19 @@ export default function App() {
             {waitlistBannerText ? (
               <div
                 aria-live="polite"
-                className="rounded-lg border border-amber-400/45 bg-amber-400/15 px-3.5 py-2 text-xs font-bold text-amber-100"
+                className="rounded-lg border border-amber-400 bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900"
               >
                 {waitlistBannerText}
               </div>
             ) : null}
 
             {phase === 'WINNER' && gameState?.winner ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-amber-400/60 bg-gradient-to-b from-[#102860] to-[#07112e] p-8 text-center">
-                <div className="inline-flex items-center gap-2 text-sm font-extrabold tracking-widest text-amber-300">
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border-2 border-amber-600 bg-gradient-to-b from-amber-100 to-amber-200 p-6 text-center">
+                <div className="inline-flex items-center gap-2 text-sm font-extrabold tracking-wide text-amber-900">
                   <Trophy className="h-5 w-5" />
-                  QUÁN QUÂN RUNG CHUÔNG VÀNG
+                  THỦ KHOA RUNG CHUÔNG VÀNG
                 </div>
-                <div className="h-28 w-28 rounded-full bg-gradient-to-br from-amber-200 to-amber-600 p-1">
+                <div className="relative h-24 w-24 overflow-hidden rounded-full border-4 border-white bg-amber-300 shadow-md">
                   <img
                     src={gameState.winner.avatar}
                     alt={gameState.winner.nickname}
@@ -1862,29 +1933,29 @@ export default function App() {
                     onError={(e) => {
                       e.currentTarget.src = createFallbackAvatarDataUri(gameState.winner?.nickname ?? '?');
                     }}
-                    className="h-full w-full rounded-full bg-[#0f2558] object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
-                <div className="font-display-royal text-3xl font-black text-white">
+                <div className="text-2xl font-extrabold text-slate-900">
                   {gameState.winner.nickname}
                 </div>
-                <div className="font-mono-tabular text-sm text-amber-300">
+                <div className="font-mono-tabular text-xs font-bold text-amber-900">
                   @{gameState.winner.uniqueId}
                 </div>
-                <p className="text-sm font-semibold text-emerald-300">
-                  Chiến thắng tuyệt đối — Người cuối cùng còn lại trong lớp học!
+                <p className="text-xs font-bold text-emerald-800">
+                  Xuất sắc vượt qua tất cả câu hỏi và giành vòng nguyệt quế!
                 </p>
               </div>
             ) : displayPlayers.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center py-14 text-center text-slate-400">
-                <div className="text-base font-bold text-amber-300">Lớp học đang chờ thí sinh vào chỗ ngồi</div>
-                <p className="mt-1 max-w-md text-sm">
-                  Nhấn "Giả lập 15 người bình luận" hoặc "Giả lập 25 bình luận Live" rồi chọn ngẫu nhiên thí sinh để xem bàn học cập nhật theo thời gian thực.
+              <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-slate-600">
+                <div className="text-sm font-extrabold text-amber-900">Lớp học đang chờ các bạn vào chỗ ngồi</div>
+                <p className="mt-1 max-w-md text-xs font-medium">
+                  Nhấn &quot;Giả lập 25 bình luận Live&quot; rồi chọn ngẫu nhiên thí sinh để xem bàn học hiển thị avatar và tên từng người chơi.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-[1fr_18px_1fr] items-start pt-1">
-                <div className={`grid gap-3 ${isDenseClassroom ? 'grid-cols-3' : 'grid-cols-2'}`}>
+              <div className="grid grid-cols-[1fr_14px_1fr] items-start pt-1">
+                <div className={`grid gap-2.5 ${isDenseClassroom ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {leftWing.map(({ player, seatIndex }) => (
                     <ClassroomDesk
                       key={player.uniqueId}
@@ -1897,10 +1968,10 @@ export default function App() {
                 </div>
 
                 <div className="flex h-full justify-center" aria-hidden="true">
-                  <div className="h-full w-0.5 border-l border-dashed border-amber-400/25" />
+                  <div className="h-full w-0.5 border-l-2 border-dashed border-amber-700/30" />
                 </div>
 
-                <div className={`grid gap-3 ${isDenseClassroom ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                <div className={`grid gap-2.5 ${isDenseClassroom ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {rightWing.map(({ player, seatIndex }) => (
                     <ClassroomDesk
                       key={player.uniqueId}
@@ -1932,53 +2003,53 @@ function ClassroomDesk({
   correctAnswer: AnswerChoice | null;
 }) {
   const isCorrectReveal = isEnded && !player.isEliminated && player.currentAnswer === correctAnswer;
+  const displayName = (player.nickname || player.uniqueId || `Bạn ${seatIndex}`).trim();
 
   return (
-    <div className={`flex flex-col items-center px-1 pt-1 transition-opacity ${player.isEliminated ? 'opacity-65' : ''}`}>
+    <div className={`flex flex-col items-center px-0.5 pt-0.5 transition-opacity ${player.isEliminated ? 'opacity-70' : ''}`}>
       <div
-        className={`self-start pl-1 font-mono-tabular text-[11px] font-bold ${
-          player.isEliminated ? 'text-slate-500' : 'text-amber-200/75'
+        className={`self-start pl-1 font-mono-tabular text-[10px] font-extrabold ${
+          player.isEliminated ? 'text-slate-500' : 'text-amber-800'
         }`}
       >
         Bàn {String(seatIndex).padStart(2, '0')}
       </div>
 
-      <div
-        className={`relative z-10 -mb-3 h-14 w-14 rounded-full p-0.5 ${
-          player.isEliminated
-            ? 'bg-slate-600'
-            : 'bg-gradient-to-br from-amber-200 to-amber-600'
-        }`}
-      >
-        <img
-          src={player.avatar}
-          alt={player.nickname}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.src = createFallbackAvatarDataUri(player.nickname || player.uniqueId);
-          }}
-          className={`h-full w-full rounded-full bg-[#0f2558] object-cover ${
-            player.isEliminated ? 'opacity-45 grayscale' : ''
-          }`}
-        />
-
-        {player.isEliminated ? (
-          <div
-            aria-label="Đã bị loại"
-            className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-slate-950/35"
-          >
-            <X className="h-9 w-9 stroke-[3.5] text-red-500" />
-          </div>
-        ) : null}
+      {/* Avatar tách biệt hoàn toàn bên trên mặt bàn */}
+      <div className="relative z-10 mb-1 h-12 w-12 shrink-0 rounded-full border-2 border-white bg-sky-100 shadow-sm">
+        <div className="relative h-full w-full overflow-hidden rounded-full flex items-center justify-center">
+          <span className="text-sm font-extrabold text-slate-900 select-none">
+            {displayName.charAt(0).toUpperCase()}
+          </span>
+          <img
+            src={player.avatar}
+            alt={displayName}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+            className={`absolute inset-0 h-full w-full object-cover ${
+              player.isEliminated ? 'opacity-40 grayscale' : ''
+            }`}
+          />
+          {player.isEliminated ? (
+            <div
+              aria-label="Đã rời bàn"
+              className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-full bg-white/40"
+            >
+              <X className="h-7 w-7 stroke-[3.5] text-red-600" />
+            </div>
+          ) : null}
+        </div>
 
         {player.currentAnswer ? (
           <span
-            className={`absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-md border-2 border-[#06112d] font-mono-tabular text-xs font-extrabold ${
+            className={`absolute -right-1.5 -top-1 flex h-5 w-5 items-center justify-center rounded-md border-2 border-white font-mono-tabular text-[11px] font-extrabold shadow-sm ${
               player.isEliminated
-                ? 'bg-slate-600 text-slate-200'
+                ? 'bg-slate-500 text-white'
                 : isCorrectReveal
                   ? 'bg-emerald-500 text-white'
-                  : 'bg-amber-400 text-slate-950'
+                  : 'bg-yellow-300 text-slate-900'
             }`}
           >
             {player.currentAnswer}
@@ -1986,15 +2057,24 @@ function ClassroomDesk({
         ) : null}
       </div>
 
+      {/* Bàn gỗ + Bảng tên giấy trắng chữ đậm */}
       <div
-        className={`relative z-20 w-full rounded-t-lg rounded-b-md border-t-2 border-b-4 px-2 pb-1.5 pt-3.5 text-center ${
+        className={`relative z-20 w-full rounded-t-lg rounded-b-md border-t-2 border-b-4 p-1.5 text-center shadow-sm ${
           player.isEliminated
-            ? 'border-t-slate-500 border-b-slate-950 bg-slate-800 text-slate-400 line-through'
-            : 'border-t-[#e09b52] border-b-[#452207] bg-gradient-to-b from-[#b86f2c] to-[#68370e] text-amber-50'
+            ? 'border-t-slate-300 border-b-slate-500 bg-slate-400'
+            : 'border-t-amber-400 border-b-[#78350f] bg-gradient-to-b from-[#d97706] to-[#b45309]'
         }`}
       >
-        <div className="truncate text-xs font-extrabold" title={player.nickname}>
-          {player.nickname}
+        <div
+          className={`w-full rounded px-1.5 py-0.5 ${
+            player.isEliminated
+              ? 'bg-slate-100 text-slate-500 line-through'
+              : 'bg-white text-slate-900'
+          }`}
+        >
+          <div className="truncate text-[11px] font-extrabold" title={displayName}>
+            {displayName}
+          </div>
         </div>
       </div>
     </div>

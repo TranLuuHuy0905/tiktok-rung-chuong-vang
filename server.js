@@ -118,6 +118,7 @@ const systemLogs = [];
 let countdownInterval = null;
 let autoTimeout = null;
 let autoInterval = null;
+let autoInviteInterval = null;
 let tiktokConnection = null;
 
 function parseCorrectAnswerValue(rawValue, options) {
@@ -523,7 +524,7 @@ const gameState = {
   correctAnswer: null,
   rosterLocked: false,
   autoMode: false,
-  autoPickCount: 15,
+  autoPickCount: 16,
   autoTransitionSeconds: 9,
   shuffleMode: true,
   autoStatus: '',
@@ -697,7 +698,7 @@ function handleIncomingChat({ uniqueId, nickname, avatar, comment }) {
         broadcastSyncState();
         addSystemLog(`${cleanName} đã bình luận "${String(comment || '').trim()}" (vào danh sách chờ).`, 'info');
       }
-      if (gameState.autoMode && gameState.phase === 'IDLE' && players.size === 0 && !autoTimeout) {
+      if (gameState.autoMode && gameState.phase === 'IDLE' && !gameState.rosterLocked && isNewCommenter) {
         evaluateAutoStep();
       }
       return;
@@ -745,13 +746,13 @@ function handleIncomingChat({ uniqueId, nickname, avatar, comment }) {
   } else if (gameState.phase === 'IDLE') {
     broadcastSyncState();
     addSystemLog(`${player.nickname} đã lên sàn chờ (bình luận ${choice})`, 'info');
-    if (gameState.autoMode && !autoTimeout) {
+    if (gameState.autoMode && !gameState.rosterLocked) {
       evaluateAutoStep();
     }
   }
 }
 
-function pickRandomPlayersFromComments(requestedCount = 15) {
+function pickRandomPlayersFromComments(requestedCount = 16) {
   const pool = Array.from(liveCommenters.values());
   if (pool.length === 0) {
     addSystemLog('Chưa có người dùng nào bình luận trong phiên Live để chọn ngẫu nhiên.', 'warning');
@@ -760,7 +761,7 @@ function pickRandomPlayersFromComments(requestedCount = 15) {
 
   clearQuestionTimer();
 
-  const count = Math.max(1, Math.min(100, Number(requestedCount) || 15));
+  const count = Math.max(1, Math.min(100, Number(requestedCount) || 16));
   // Thuật toán Fisher-Yates xáo trộn công bằng danh sách người đã bình luận
   const shuffled = [...pool];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -867,7 +868,7 @@ function clearQuestionTimer() {
   }
 }
 
-function clearAutoScheduler() {
+function clearAutoActionTimers() {
   if (autoTimeout) {
     clearTimeout(autoTimeout);
     autoTimeout = null;
@@ -878,6 +879,18 @@ function clearAutoScheduler() {
   }
 }
 
+function clearAutoInviteScheduler() {
+  if (autoInviteInterval) {
+    clearInterval(autoInviteInterval);
+    autoInviteInterval = null;
+  }
+}
+
+function clearAutoScheduler() {
+  clearAutoActionTimers();
+  clearAutoInviteScheduler();
+}
+
 function emitAutoStatus() {
   io.emit('auto_status', {
     autoMode: gameState.autoMode,
@@ -886,6 +899,37 @@ function emitAutoStatus() {
     shuffleMode: gameState.shuffleMode,
     autoStatus: gameState.autoStatus,
   });
+}
+
+function emitAutoInvite() {
+  if (!gameState.autoMode || gameState.phase !== 'IDLE' || gameState.rosterLocked) {
+    clearAutoInviteScheduler();
+    return;
+  }
+  const targetCount = Math.max(1, Math.min(100, Number(gameState.autoPickCount) || 16));
+  const currentCount = Math.max(players.size, liveCommenters.size);
+  if (currentCount >= targetCount) {
+    clearAutoInviteScheduler();
+    evaluateAutoStep();
+    return;
+  }
+
+  const remainingNeeded = targetCount - currentCount;
+  const text =
+    currentCount === 0
+      ? `Lớp học Rung Chuông Vàng sắp bắt đầu! Mời các bạn bình luận ngay để đủ ${targetCount} thí sinh tham gia nhé!`
+      : `Hiện đã có ${currentCount} bạn, còn thiếu ${remainingNeeded} bạn nữa là đủ ${targetCount} thí sinh! Mời các bạn bình luận ngay để vào lớp nhé!`;
+
+  io.emit('auto_invite', {
+    currentCount,
+    targetCount,
+    remainingNeeded,
+    text,
+  });
+  addSystemLog(
+    `Phát âm thanh mời vào lớp (${currentCount}/${targetCount} thí sinh, nhắc lại mỗi 10s).`,
+    'info'
+  );
 }
 
 function scheduleAutoAction(seconds, labelBuilder, callback) {
@@ -929,8 +973,9 @@ function startNextAutoRound() {
 
   addSystemLog('Chế độ Tự động: Khởi tạo ván đấu mới!', 'warning');
 
-  if (liveCommenters.size > 0) {
-    pickRandomPlayersFromComments(gameState.autoPickCount);
+  const targetCount = Math.max(1, Math.min(100, Number(gameState.autoPickCount) || 16));
+  if (liveCommenters.size >= targetCount) {
+    pickRandomPlayersFromComments(targetCount);
   } else {
     if (gameState.shuffleMode) {
       shuffleQuestionsOrder(`Đã trộn ngẫu nhiên ${QUESTIONS.length} câu hỏi chuẩn bị cho ván mới.`);
@@ -941,32 +986,62 @@ function startNextAutoRound() {
 }
 
 function evaluateAutoStep() {
-  clearAutoScheduler();
   if (!gameState.autoMode) {
+    clearAutoScheduler();
     gameState.autoStatus = '';
     emitAutoStatus();
     return;
   }
 
   if (gameState.phase === 'IDLE') {
-    if (players.size > 0) {
+    const targetCount = Math.max(1, Math.min(100, Number(gameState.autoPickCount) || 16));
+    const waitingCount = Math.max(players.size, liveCommenters.size);
+
+    if (gameState.rosterLocked && players.size > 0) {
+      clearAutoInviteScheduler();
       scheduleAutoAction(
         4,
-        (s) => `Tự động phát Câu 1 sau ${s}s`,
+        (s) => `Đủ ${players.size} thí sinh! Tự động phát Câu 1 sau ${s}s`,
         () => startQuestion(0)
       );
-    } else if (liveCommenters.size > 0) {
-      scheduleAutoAction(
-        4,
-        (s) => `Đang gom bình luận — tự động bốc thăm sau ${s}s`,
-        () => pickRandomPlayersFromComments(gameState.autoPickCount)
+      return;
+    }
+
+    if (waitingCount >= targetCount) {
+      clearAutoScheduler();
+      addSystemLog(
+        `Đã đủ ${waitingCount}/${targetCount} thí sinh! Tự động đưa thí sinh vào lớp và bắt đầu ván mới.`,
+        'success'
       );
-    } else {
-      gameState.autoStatus = 'Đang chờ người xem bình luận trên Live để tự bốc thăm mở ván...';
-      emitAutoStatus();
+      if (liveCommenters.size >= targetCount) {
+        pickRandomPlayersFromComments(targetCount);
+      } else {
+        gameState.rosterLocked = true;
+        broadcastSyncState();
+        scheduleAutoAction(
+          4,
+          (s) => `Đủ ${players.size} thí sinh! Tự động phát Câu 1 sau ${s}s`,
+          () => startQuestion(0)
+        );
+      }
+      return;
+    }
+
+    // Chưa đủ số lượng thí sinh mặc định (16): giữ vòng lặp phát loa mời mỗi 10 giây
+    clearAutoActionTimers();
+    gameState.autoStatus = `Đang chờ đủ thí sinh (${waitingCount}/${targetCount}) — mời vào lớp mỗi 10s`;
+    emitAutoStatus();
+
+    if (!autoInviteInterval) {
+      emitAutoInvite();
+      autoInviteInterval = setInterval(() => {
+        emitAutoInvite();
+      }, 10000);
     }
     return;
   }
+
+  clearAutoScheduler();
 
   if (gameState.phase === 'QUESTION') {
     const qNum = (gameState.currentQuestionIndex ?? 0) + 1;
@@ -1410,20 +1485,20 @@ app.get('/api/tts', async (req, res) => {
   }
 });
 
-// Phục vụ thư mục tĩnh public
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/overlay', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 app.get('/admin', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-app.get('/', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get('/overlay', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'overlay.html'));
 });
+
+// Phục vụ thư mục tĩnh public
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Kết nối Socket.io thời gian thực
 io.on('connection', (socket) => {
@@ -1483,8 +1558,14 @@ io.on('connection', (socket) => {
   socket.on('set_auto_mode', (payload) => {
     const hasEnabled = typeof payload?.enabled === 'boolean';
     const enabled = hasEnabled ? payload.enabled : gameState.autoMode;
-    if (payload?.pickCount) {
-      gameState.autoPickCount = Math.max(1, Math.min(100, Number(payload.pickCount) || 15));
+    if (payload?.pickCount !== undefined) {
+      const nextPickCount = Math.max(1, Math.min(100, Number(payload.pickCount) || 16));
+      if (nextPickCount !== gameState.autoPickCount) {
+        gameState.autoPickCount = nextPickCount;
+        if (!hasEnabled) {
+          addSystemLog(`Đã cập nhật số thí sinh cần để tự động bắt đầu: ${nextPickCount} bạn.`, 'info');
+        }
+      }
     }
     if (payload?.transitionSeconds !== undefined) {
       const nextSeconds = Math.max(5, Math.min(20, Number(payload.transitionSeconds) || 9));
@@ -1499,7 +1580,7 @@ io.on('connection', (socket) => {
     if (hasEnabled) {
       addSystemLog(
         enabled
-          ? `Đã BẬT chế độ Tự động vận hành (bốc thăm ${gameState.autoPickCount} thí sinh, nghỉ chuyển câu ${gameState.autoTransitionSeconds}s).`
+          ? `Đã BẬT chế độ Tự động vận hành (đủ ${gameState.autoPickCount} thí sinh tự bắt đầu, mời mỗi 10s, nghỉ chuyển câu ${gameState.autoTransitionSeconds}s).`
           : 'Đã TẮT chế độ Tự động vận hành — chuyển về điều khiển thủ công.',
         enabled ? 'success' : 'warning'
       );
