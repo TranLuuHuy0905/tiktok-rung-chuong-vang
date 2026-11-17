@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rung Chuông Vàng — OBS Broadcast Overlay (1080x1920)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;700;800&family=Playfair+Display:wght@700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      :root {
+        --royal-deep: #050d22;
+        --royal-mid: #0a1b44;
+        --royal-surface: #0f2558;
+        --royal-border: rgba(245, 196, 81, 0.28);
+        --gold-bright: #ffe18c;
+        --gold-primary: #f5c451;
+        --gold-deep: #c98f1e;
+        --emerald-bg: #064e3b;
+        --emerald-border: #10b981;
+        --emerald-text: #a7f3d0;
+        --crimson: #ef4444;
+        --ink-primary: #f8fafc;
+        --ink-muted: #94a3b8;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #030712;
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        color: var(--ink-primary);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .viewport-wrapper {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: radial-gradient(circle at center, #0a142d 0%, #030712 100%);
+      }
+
+      /* Khung hình chuẩn dọc 1080x1920px cho OBS */
+      .stage-canvas {
+        width: 1080px;
+        height: 1920px;
+        flex-shrink: 0;
+        transform-origin: center center;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        padding: 44px 48px 40px;
+        gap: 28px;
+        background:
+          radial-gradient(ellipse 900px 620px at 50% 0%, rgba(245, 196, 81, 0.14) 0%, transparent 70%),
+          radial-gradient(ellipse 850px 800px at 50% 45%, rgba(29, 78, 216, 0.22) 0%, transparent 75%),
+          linear-gradient(180deg, #06112d 0%, #0a1c47 48%, #050d24 100%);
+        border: 2px solid rgba(245, 196, 81, 0.24);
+        overflow: hidden;
+      }
+
+      /* Khung viền trang trí hoàng gia góc */
+      .stage-canvas::before {
+        content: '';
+        position: absolute;
+        inset: 16px;
+        border: 1px solid rgba(245, 196, 81, 0.18);
+        border-radius: 20px;
+        pointer-events: none;
+      }
+
+      /* 1. Khu vực Tiêu đề RUNG CHUÔNG VÀNG */
+      .header-section {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding-top: 8px;
+        gap: 10px;
+      }
+
+      .bell-crest {
+        width: 82px;
+        height: 82px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: linear-gradient(145deg, rgba(245, 196, 81, 0.2), rgba(201, 143, 30, 0.06));
+        border: 2px solid rgba(245, 196, 81, 0.55);
+        box-shadow: 0 10px 30px rgba(245, 196, 81, 0.18);
+      }
+
+      .bell-crest.ringing svg {
+        animation: bellSwing 0.55s ease-in-out 2;
+        transform-origin: top center;
+      }
+
+      @keyframes bellSwing {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(12deg); }
+        55% { transform: rotate(-10deg); }
+        80% { transform: rotate(6deg); }
+      }
+
+      .main-title {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 64px;
+        font-weight: 900;
+        letter-spacing: 0.04em;
+        line-height: 1.08;
+        background: linear-gradient(180deg, #fff3c4 0%, #f5c451 55%, #c98f1e 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        text-shadow: 0 6px 28px rgba(245, 196, 81, 0.22);
+      }
+
+      .subtitle-line {
+        font-size: 23px;
+        font-weight: 600;
+        color: #cbd5e1;
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle-line strong {
+        color: var(--gold-bright);
+      }
+
+      /* 2. Khung câu hỏi + Đếm ngược 15s + Progress bar */
+      .question-panel {
+        position: relative;
+        z-index: 2;
+        background: linear-gradient(180deg, rgba(16, 40, 96, 0.92) 0%, rgba(10, 26, 66, 0.96) 100%);
+        border: 2px solid rgba(245, 196, 81, 0.38);
+        border-radius: 24px;
+        padding: 32px 36px 28px;
+        box-shadow: 0 20px 50px rgba(2, 6, 23, 0.55);
+        display: flex;
+        flex-direction: column;
+        gap: 22px;
+      }
+
+      .question-top-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .question-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .question-kicker {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--gold-primary);
+        letter-spacing: 0.03em;
+      }
+
+      .phase-status {
+        font-size: 20px;
+        font-weight: 600;
+        color: #cbd5e1;
+      }
+
+      .phase-status.status-active {
+        color: #fde68a;
+      }
+
+      .phase-status.status-reveal {
+        color: #6ee7b7;
+      }
+
+      /* Huy hiệu đếm ngược 15s */
+      .countdown-badge {
+        position: relative;
+        width: 118px;
+        height: 118px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(5, 13, 34, 0.85);
+        border: 2px solid rgba(245, 196, 81, 0.35);
+      }
+
+      .countdown-svg {
+        position: absolute;
+        inset: -2px;
+        width: 118px;
+        height: 118px;
+        transform: rotate(-90deg);
+      }
+
+      .countdown-track {
+        fill: none;
+        stroke: rgba(255, 255, 255, 0.08);
+        stroke-width: 7;
+      }
+
+      .countdown-ring {
+        fill: none;
+        stroke: var(--gold-primary);
+        stroke-width: 7;
+        stroke-linecap: round;
+        stroke-dasharray: 326.73;
+        stroke-dashoffset: 0;
+        transition: stroke-dashoffset 0.9s linear, stroke 0.2s ease;
+      }
+
+      .countdown-badge.urgent {
+        border-color: rgba(239, 68, 68, 0.65);
+      }
+
+      .countdown-badge.urgent .countdown-ring {
+        stroke: #ef4444;
+      }
+
+      .countdown-number {
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 40px;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--gold-bright);
+      }
+
+      .countdown-badge.urgent .countdown-number {
+        color: #fca5a5;
+      }
+
+      .countdown-unit {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--ink-muted);
+        margin-top: 2px;
+      }
+
+      .question-text {
+        font-size: 36px;
+        font-weight: 700;
+        line-height: 1.38;
+        color: #ffffff;
+        text-wrap: balance;
+        min-height: 102px;
+        display: flex;
+        align-items: center;
+      }
+
+      .question-text.idle-text {
+        color: #cbd5e1;
+        font-weight: 600;
+        font-size: 31px;
+      }
+
+      /* Thanh Progress Bar chạy mượt */
+      .progress-track {
+        width: 100%;
+        height: 14px;
+        border-radius: 999px;
+        background: rgba(5, 13, 34, 0.85);
+        border: 1px solid rgba(245, 196, 81, 0.22);
+        overflow: hidden;
+      }
+
+      .progress-fill {
+        width: 100%;
+        height: 100%;
+        transform-origin: left center;
+        transform: scaleX(0);
+        background: linear-gradient(90deg, #d49b27 0%, #f5c451 55%, #ffe699 100%);
+        transition: transform 1s linear;
+        will-change: transform;
+      }
+
+      .progress-fill.urgent {
+        background: linear-gradient(90deg, #dc2626 0%, #f59e0b 100%);
+      }
+
+      /* 3. Lưới 2x2 hiển thị 4 đáp án A-B-C-D */
+      .options-grid {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+      }
+
+      .option-card {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        padding: 24px 26px;
+        min-height: 122px;
+        border-radius: 20px;
+        background: rgba(15, 37, 88, 0.88);
+        border: 2px solid rgba(245, 196, 81, 0.3);
+        transition: transform 0.2s ease, opacity 0.25s ease, background 0.25s ease, border-color 0.25s ease;
+      }
+
+      .option-key {
+        width: 58px;
+        height: 58px;
+        flex-shrink: 0;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 28px;
+        font-weight: 800;
+        color: #07122e;
+        background: linear-gradient(180deg, #ffe28f 0%, #e7ae33 100%);
+      }
+
+      .option-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .option-label {
+        font-size: 26px;
+        font-weight: 700;
+        line-height: 1.28;
+        color: #f8fafc;
+      }
+
+      .option-sub {
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 16px;
+        font-weight: 600;
+        color: #94a3b8;
+      }
+
+      /* Trạng thái công bố đáp án đúng */
+      .option-card.is-correct {
+        background: linear-gradient(135deg, #065f46 0%, #047857 100%);
+        border-color: #34d399;
+        box-shadow: 0 0 36px rgba(16, 185, 129, 0.45);
+        transform: scale(1.02);
+      }
+
+      .option-card.is-correct .option-key {
+        background: #ecfdf5;
+        color: #065f46;
+      }
+
+      .option-card.is-correct .option-label {
+        color: #ffffff;
+      }
+
+      .option-card.is-correct .option-sub {
+        color: #a7f3d0;
+      }
+
+      .option-card.is-wrong {
+        opacity: 0.42;
+      }
+
+      /* 4. Thanh thống kê số người còn lại trên sàn */
+      .stats-bar {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 30px;
+        border-radius: 18px;
+        background: rgba(7, 17, 46, 0.9);
+        border: 1.5px solid rgba(245, 196, 81, 0.34);
+      }
+
+      .survivor-count {
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--gold-bright);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .survivor-count span.num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 36px;
+        color: #ffffff;
+      }
+
+      .stats-secondary {
+        font-size: 22px;
+        font-weight: 600;
+        color: #cbd5e1;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* 5. Khu vực sân khấu thí sinh — Thiết kế theo kiểu lớp học */
+      .arena-section {
+        position: relative;
+        z-index: 2;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background:
+          linear-gradient(180deg, rgba(10, 29, 70, 0.92) 0%, rgba(5, 14, 36, 0.96) 100%);
+        border: 2px solid rgba(245, 196, 81, 0.3);
+        border-radius: 24px;
+        padding: 20px 24px 22px;
+        gap: 14px;
+        overflow: hidden;
+      }
+
+      /* Bảng lớp & Tiêu đề khu vực lớp học */
+      .arena-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px 12px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #0d3b2e 0%, #082920 100%);
+        border: 2px solid #925420;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+
+      .arena-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #fef3c7;
+        letter-spacing: 0.03em;
+      }
+
+      .arena-legend {
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 17px;
+        font-weight: 700;
+        color: #d1fae5;
+      }
+
+      /* Mặt sàn lớp học gồm 2 dãy bàn + lối đi ở giữa */
+      .classroom-stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .classroom-floor {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 30px 1fr;
+        align-content: start;
+        overflow: hidden;
+        padding-top: 4px;
+      }
+
+      .classroom-wing {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px 14px;
+        align-content: start;
+      }
+
+      .classroom-floor.dense .classroom-wing {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px 10px;
+      }
+
+      .classroom-aisle {
+        position: relative;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+      }
+
+      .classroom-aisle::before {
+        content: '';
+        width: 2px;
+        height: 100%;
+        background: repeating-linear-gradient(
+          180deg,
+          rgba(245, 196, 81, 0.24) 0px,
+          rgba(245, 196, 81, 0.24) 10px,
+          transparent 10px,
+          transparent 20px
+        );
+      }
+
+      /* Từng chỗ ngồi / bàn học thí sinh */
+      .desk-seat {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px 6px 0;
+        transition: opacity 0.35s ease, filter 0.35s ease, transform 0.25s ease;
+      }
+
+      .seat-number {
+        align-self: flex-start;
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-size: 13px;
+        font-weight: 700;
+        color: rgba(255, 225, 140, 0.72);
+        margin-bottom: 2px;
+        padding-left: 4px;
+      }
+
+      .classroom-floor.dense .seat-number {
+        font-size: 11px;
+      }
+
+      .avatar-frame {
+        position: relative;
+        width: 84px;
+        height: 84px;
+        border-radius: 999px;
+        padding: 3px;
+        background: linear-gradient(145deg, #ffe28f, #c98f1e);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+        z-index: 2;
+        margin-bottom: -14px;
+      }
+
+      .classroom-floor.dense .avatar-frame {
+        width: 68px;
+        height: 68px;
+        margin-bottom: -11px;
+      }
+
+      .avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        object-fit: cover;
+        background: #0f2558;
+        display: block;
+      }
+
+      /* Bảng con viết đáp án đặt trên bàn */
+      .answer-tag {
+        position: absolute;
+        right: -6px;
+        top: -4px;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #f5c451;
+        color: #06112d;
+        border: 2px solid #06112d;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 17px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+      }
+
+      .classroom-floor.dense .answer-tag {
+        width: 26px;
+        height: 26px;
+        font-size: 14px;
+      }
+
+      .answer-tag.correct-tag {
+        background: #10b981;
+        color: #ffffff;
+      }
+
+      /* Mặt bàn học bằng gỗ + Bảng tên thí sinh */
+      .desk-surface {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        padding: 16px 8px 9px;
+        border-radius: 10px 10px 6px 6px;
+        background: linear-gradient(180deg, #b86f2c 0%, #8c4f19 52%, #68370e 100%);
+        border-top: 3px solid #e09b52;
+        border-left: 1px solid rgba(255, 224, 150, 0.28);
+        border-right: 1px solid rgba(0, 0, 0, 0.4);
+        border-bottom: 5px solid #452207;
+        box-shadow: 0 8px 14px rgba(2, 6, 23, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .classroom-floor.dense .desk-surface {
+        padding: 13px 6px 7px;
+        border-bottom-width: 4px;
+      }
+
+      .player-name {
+        width: 100%;
+        font-size: 18px;
+        font-weight: 800;
+        color: #fffbeb;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+      }
+
+      .classroom-floor.dense .player-name {
+        font-size: 15px;
+      }
+
+      /* Trạng thái bị loại: avatar mờ + trắng đen + dấu X đỏ đè lên, bàn học xám lại */
+      .desk-seat.eliminated .avatar-frame {
+        background: #475569;
+        box-shadow: none;
+      }
+
+      .desk-seat.eliminated .avatar-img {
+        filter: grayscale(100%);
+        opacity: 0.45;
+      }
+
+      .desk-seat.eliminated .desk-surface {
+        background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+        border-top-color: #64748b;
+        border-bottom-color: #0f172a;
+        opacity: 0.62;
+      }
+
+      .desk-seat.eliminated .player-name {
+        color: #94a3b8;
+        text-decoration: line-through;
+      }
+
+      .desk-seat.eliminated .answer-tag {
+        background: #475569;
+        color: #e2e8f0;
+      }
+
+      .desk-seat.eliminated .seat-number {
+        color: #64748b;
+      }
+
+      .eliminated-x-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.35);
+        pointer-events: none;
+      }
+
+      .eliminated-x-overlay svg {
+        width: 58px;
+        height: 58px;
+        filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.75));
+      }
+
+      .classroom-floor.dense .eliminated-x-overlay svg {
+        width: 46px;
+        height: 46px;
+      }
+
+      .empty-arena {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 110px 40px;
+        text-align: center;
+        gap: 14px;
+        color: #94a3b8;
+      }
+
+      .empty-arena-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--gold-bright);
+      }
+
+      .empty-arena-desc {
+        font-size: 22px;
+        line-height: 1.5;
+        max-width: 680px;
+      }
+
+      /* Vinh danh Quán quân — Người cuối cùng còn lại */
+      .winner-spotlight {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 44px 36px;
+        gap: 18px;
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at 50% 25%, rgba(245, 196, 81, 0.28) 0%, rgba(15, 37, 88, 0.72) 68%),
+          linear-gradient(180deg, rgba(16, 40, 96, 0.94) 0%, rgba(7, 17, 46, 0.98) 100%);
+        border: 2px solid rgba(245, 196, 81, 0.65);
+        box-shadow: 0 24px 60px rgba(245, 196, 81, 0.18);
+      }
+
+      .winner-kicker {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: var(--gold-bright);
+      }
+
+      .winner-avatar-ring {
+        width: 220px;
+        height: 220px;
+        border-radius: 999px;
+        padding: 7px;
+        background: linear-gradient(145deg, #fff3c4 0%, #f5c451 50%, #c98f1e 100%);
+        box-shadow: 0 0 48px rgba(245, 196, 81, 0.45);
+      }
+
+      .winner-avatar-ring img {
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        object-fit: cover;
+        display: block;
+        background: #0f2558;
+      }
+
+      .winner-name {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 48px;
+        font-weight: 900;
+        color: #ffffff;
+        line-height: 1.15;
+      }
+
+      .winner-handle {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 22px;
+        font-weight: 600;
+        color: var(--gold-primary);
+      }
+
+      .winner-caption {
+        font-size: 24px;
+        font-weight: 600;
+        color: #a7f3d0;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation-duration: 0.01ms !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="viewport-wrapper">
+      <main id="stageCanvas" class="stage-canvas" aria-label="Giao diện phát sóng Rung Chuông Vàng 1080x1920">
+        <!-- 1. Tiêu đề RUNG CHUÔNG VÀNG -->
+        <header class="header-section">
+          <div id="bellCrest" class="bell-crest" aria-hidden="true">
+            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#FFE18C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" fill="rgba(245, 196, 81, 0.25)" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+          </div>
+          <h1 class="main-title">RUNG CHUÔNG VÀNG</h1>
+          <p class="subtitle-line">
+            Bình luận <strong>A</strong>, <strong>B</strong>, <strong>C</strong> hoặc <strong>D</strong> trên TikTok Live để giữ vị trí trên sàn
+          </p>
+        </header>
+
+        <!-- 2. Khung câu hỏi + Huy hiệu đếm ngược 15s + Progress bar -->
+        <section class="question-panel" aria-live="polite">
+          <div class="question-top-row">
+            <div class="question-meta">
+              <div id="questionKicker" class="question-kicker">Phòng thi trực tuyến · Chờ phát câu hỏi</div>
+              <div id="phaseStatus" class="phase-status">Hệ thống sẵn sàng nhận thí sinh</div>
+            </div>
+
+            <div id="countdownBadge" class="countdown-badge" aria-label="Thời gian còn lại">
+              <svg class="countdown-svg" viewBox="0 0 118 118" aria-hidden="true">
+                <circle class="countdown-track" cx="59" cy="59" r="52" />
+                <circle id="countdownRing" class="countdown-ring" cx="59" cy="59" r="52" />
+              </svg>
+              <div id="countdownNumber" class="countdown-number">15</div>
+              <div class="countdown-unit">giây</div>
+            </div>
+          </div>
+
+          <div id="questionText" class="question-text idle-text">
+            Hãy chuẩn bị sẵn sàng! Khi câu hỏi xuất hiện, thí sinh có 15 giây để bình luận đáp án đúng.
+          </div>
+
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+        </section>
+
+        <!-- 3. Lưới 2x2 hiển thị 4 đáp án A-B-C-D -->
+        <section class="options-grid" aria-label="Các lựa chọn đáp án">
+          <div id="optionCardA" class="option-card">
+            <div class="option-key">A</div>
+            <div class="option-body">
+              <div id="optionTextA" class="option-label">Đang chờ câu hỏi...</div>
+              <div id="optionSubA" class="option-sub">0 lượt chọn</div>
+            </div>
+          </div>
+          <div id="optionCardB" class="option-card">
+            <div class="option-key">B</div>
+            <div class="option-body">
+              <div id="optionTextB" class="option-label">Đang chờ câu hỏi...</div>
+              <div id="optionSubB" class="option-sub">0 lượt chọn</div>
+            </div>
+          </div>
+          <div id="optionCardC" class="option-card">
+            <div class="option-key">C</div>
+            <div class="option-body">
+              <div id="optionTextC" class="option-label">Đang chờ câu hỏi...</div>
+              <div id="optionSubC" class="option-sub">0 lượt chọn</div>
+            </div>
+          </div>
+          <div id="optionCardD" class="option-card">
+            <div class="option-key">D</div>
+            <div class="option-body">
+              <div id="optionTextD" class="option-label">Đang chờ câu hỏi...</div>
+              <div id="optionSubD" class="option-sub">0 lượt chọn</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. Thanh thống kê số người còn lại trên sàn -->
+        <section class="stats-bar" aria-label="Thống kê sàn đấu">
+          <div id="survivorStats" class="survivor-count">
+            Còn <span class="num">0</span> / <span class="num">0</span> người trên sàn
+          </div>
+          <div id="eliminatedStats" class="stats-secondary">Đã bị loại: 0</div>
+        </section>
+
+        <!-- 5. Khu vực sân khấu thí sinh — Sơ đồ lớp học -->
+        <section class="arena-section" aria-label="Sân khấu thí sinh kiểu lớp học">
+          <div class="arena-header">
+            <h2 class="arena-title">LỚP HỌC THI ĐẤU · SÂN KHẤU THÍ SINH</h2>
+            <div id="arenaLegend" class="arena-legend">Chỗ ngồi: 0 / 30</div>
+          </div>
+          <div id="playersGrid" class="classroom-stage">
+            <div class="empty-arena">
+              <div class="empty-arena-title">Lớp học đang chờ thí sinh vào chỗ ngồi</div>
+              <div class="empty-arena-desc">
+                Người xem bình luận trên TikTok Live sẽ được chọn ngẫu nhiên vào bàn học hoặc trực tiếp bình luận A, B, C, D để thi đấu.
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const socket = io();
+      const RING_CIRCUMFERENCE = 2 * Math.PI * 52; // 326.7256
+
+      const stageCanvas = document.getElementById('stageCanvas');
+      const bellCrest = document.getElementById('bellCrest');
+      const questionKicker = document.getElementById('questionKicker');
+      const phaseStatus = document.getElementById('phaseStatus');
+      const countdownBadge = document.getElementById('countdownBadge');
+      const countdownRing = document.getElementById('countdownRing');
+      const countdownNumber = document.getElementById('countdownNumber');
+      const questionText = document.getElementById('questionText');
+      const progressFill = document.getElementById('progressFill');
+      const survivorStats = document.getElementById('survivorStats');
+      const eliminatedStats = document.getElementById('eliminatedStats');
+      const playersGrid = document.getElementById('playersGrid');
+      const arenaLegend = document.getElementById('arenaLegend');
+
+      const optionKeys = ['A', 'B', 'C', 'D'];
+      let latestState = null;
+
+      // Tự động co giãn khung 1080x1920 vừa khít trình duyệt / iframe mà vẫn giữ đúng tỷ lệ 1080x1920 cho OBS
+      function fitCanvasToViewport() {
+        const scale = Math.min(window.innerWidth / 1080, window.innerHeight / 1920);
+        stageCanvas.style.transform = `scale(${scale})`;
+      }
+      window.addEventListener('resize', fitCanvasToViewport);
+      fitCanvasToViewport();
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+      }
+
+      function createFallbackAvatarDataUri(name) {
+        const letter = escapeHtml((name || '?').trim().charAt(0).toUpperCase() || '?');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"><rect width="120" height="120" fill="#102a63"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#FFE18C" font-family="sans-serif" font-size="52" font-weight="800">${letter}</text></svg>`;
+        return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+      }
+
+      function updateTimerVisuals(timeLeft, duration, phase) {
+        const safeDuration = duration || 15;
+        const safeTime = Math.max(0, Math.min(safeDuration, Number(timeLeft) || 0));
+        const isEnded = phase === 'REVEAL' || phase === 'WINNER' || phase === 'GAME_OVER';
+        const ratio = phase === 'QUESTION' ? safeTime / safeDuration : isEnded ? 0 : 1;
+
+        countdownNumber.textContent = phase === 'IDLE' ? String(safeDuration) : String(safeTime);
+
+        const offset = RING_CIRCUMFERENCE * (1 - ratio);
+        countdownRing.style.strokeDashoffset = String(offset);
+
+        const isUrgent = phase === 'QUESTION' && safeTime <= 5;
+        countdownBadge.classList.toggle('urgent', isUrgent);
+        progressFill.classList.toggle('urgent', isUrgent);
+
+        if (phase === 'QUESTION') {
+          progressFill.style.transform = `scaleX(${ratio})`;
+        } else if (isEnded) {
+          progressFill.style.transform = 'scaleX(0)';
+        } else {
+          progressFill.style.transform = 'scaleX(1)';
+        }
+      }
+
+      function renderState(state) {
+        if (!state) return;
+        latestState = state;
+
+        const {
+          phase,
+          currentQuestion,
+          timeLeft,
+          questionDuration,
+          correctAnswer,
+          stats,
+          players,
+          winner,
+          rosterLocked,
+        } = state;
+
+        const isEnded = phase === 'REVEAL' || phase === 'WINNER' || phase === 'GAME_OVER';
+
+        // 1. Khung câu hỏi & trạng thái
+        if (phase === 'IDLE' || !currentQuestion) {
+          questionKicker.textContent = 'Phòng thi trực tuyến · Chờ phát câu hỏi';
+          phaseStatus.textContent = rosterLocked
+            ? `Đã chốt ${stats?.total ?? 0} thí sinh ngẫu nhiên · Sẵn sàng khai cuộc`
+            : 'Hệ thống sẵn sàng nhận thí sinh';
+          phaseStatus.className = 'phase-status';
+          questionText.textContent = rosterLocked
+            ? 'Danh sách thí sinh đã được chọn ngẫu nhiên từ bình luận Live. Chuẩn bị trả lời câu hỏi trong 15 giây!'
+            : 'Hãy chuẩn bị sẵn sàng! Khi câu hỏi xuất hiện, thí sinh có 15 giây để bình luận đáp án đúng.';
+          questionText.classList.add('idle-text');
+        } else {
+          questionKicker.textContent = `Câu hỏi 0${currentQuestion.index + 1} / 0${currentQuestion.total} · ${currentQuestion.topic}`;
+          questionText.textContent = currentQuestion.question;
+          questionText.classList.remove('idle-text');
+
+          if (phase === 'QUESTION') {
+            phaseStatus.textContent =
+              timeLeft <= 5 ? 'Sắp hết giờ — Chốt đáp án ngay!' : 'Đang nhận đáp án A, B, C, D';
+            phaseStatus.className = 'phase-status status-active';
+          } else if (phase === 'WINNER' && winner) {
+            phaseStatus.textContent = `Quán quân đã Rung Chuông Vàng! · Đáp án đúng: ${correctAnswer}`;
+            phaseStatus.className = 'phase-status status-reveal';
+          } else if (phase === 'GAME_OVER') {
+            phaseStatus.textContent = `Hết giờ · Đáp án đúng: ${correctAnswer} · Không còn thí sinh trụ hạng`;
+            phaseStatus.className = 'phase-status';
+          } else if (phase === 'REVEAL') {
+            phaseStatus.textContent = `Hết giờ · Đáp án chính xác là ${correctAnswer}`;
+            phaseStatus.className = 'phase-status status-reveal';
+          }
+        }
+
+        updateTimerVisuals(timeLeft, questionDuration, phase);
+
+        // 2. Lưới 4 đáp án A-B-C-D
+        const counts = stats?.answerCounts || { A: 0, B: 0, C: 0, D: 0 };
+        optionKeys.forEach((key) => {
+          const card = document.getElementById(`optionCard${key}`);
+          const labelEl = document.getElementById(`optionText${key}`);
+          const subEl = document.getElementById(`optionSub${key}`);
+
+          card.classList.remove('is-correct', 'is-wrong');
+
+          if (currentQuestion && currentQuestion.options && currentQuestion.options[key]) {
+            labelEl.textContent = currentQuestion.options[key];
+          } else {
+            labelEl.textContent = 'Đang chờ câu hỏi...';
+          }
+
+          const count = counts[key] || 0;
+          if (isEnded && correctAnswer) {
+            if (key === correctAnswer) {
+              card.classList.add('is-correct');
+              subEl.textContent = `✓ Đáp án đúng · ${count} lượt chọn`;
+            } else {
+              card.classList.add('is-wrong');
+              subEl.textContent = `${count} lượt chọn`;
+            }
+          } else {
+            subEl.textContent = `${count} lượt chọn`;
+          }
+        });
+
+        // 3. Thanh thống kê người chơi
+        const remaining = stats?.remaining ?? 0;
+        const total = stats?.total ?? 0;
+        const eliminated = stats?.eliminated ?? 0;
+
+        survivorStats.innerHTML = `Còn <span class="num">${remaining}</span> / <span class="num">${total}</span> người trên sàn`;
+        eliminatedStats.textContent = `Đã bị loại: ${eliminated}`;
+
+        // 4. Sân khấu thí sinh kiểu lớp học hoặc Vinh danh Quán quân cuối cùng còn lại
+        if (phase === 'WINNER' && winner) {
+          const safeWinnerName = escapeHtml(winner.nickname || winner.uniqueId);
+          const safeWinnerId = escapeHtml(winner.uniqueId);
+          const winnerFallback = createFallbackAvatarDataUri(winner.nickname || winner.uniqueId);
+          arenaLegend.textContent = 'Thủ khoa lớp học — Người cuối cùng trụ hạng';
+
+          playersGrid.innerHTML = `
+            <div class="winner-spotlight">
+              <div class="winner-kicker">QUÁN QUÂN RUNG CHUÔNG VÀNG</div>
+              <div class="winner-avatar-ring">
+                <img
+                  src="${escapeHtml(winner.avatar)}"
+                  alt="${safeWinnerName}"
+                  referrerpolicy="no-referrer"
+                  onerror="this.onerror=null;this.src='${winnerFallback}'"
+                />
+              </div>
+              <div class="winner-name">${safeWinnerName}</div>
+              <div class="winner-handle">@${safeWinnerId}</div>
+              <div class="winner-caption">Chiến thắng tuyệt đối — Người cuối cùng còn lại trong lớp học!</div>
+            </div>
+          `;
+          return;
+        }
+
+        // Sắp xếp bàn học theo thứ tự còn trụ hạng lên hàng đầu
+        const sortedPlayers = [...(players || [])].sort((a, b) => {
+          if (a.isEliminated !== b.isEliminated) return a.isEliminated ? 1 : -1;
+          return (b.answeredAt || 0) - (a.answeredAt || 0);
+        });
+
+        const isDense = sortedPlayers.length > 16;
+        const visibleLimit = isDense ? 30 : 16;
+        const displayPlayers = sortedPlayers.slice(0, visibleLimit);
+        arenaLegend.textContent =
+          total > visibleLimit
+            ? `Hiển thị ${visibleLimit} / ${total} bàn học`
+            : `Chỗ ngồi: ${remaining} còn thi / ${total} bàn`;
+
+        if (displayPlayers.length === 0) {
+          playersGrid.innerHTML = `
+            <div class="empty-arena">
+              <div class="empty-arena-title">Lớp học đang chờ thí sinh vào chỗ ngồi</div>
+              <div class="empty-arena-desc">
+                Người xem bình luận trên TikTok Live sẽ được chọn ngẫu nhiên vào bàn học hoặc trực tiếp bình luận A, B, C, D để thi đấu.
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        const colsPerSide = isDense ? 3 : 2;
+        const leftWingSeats = [];
+        const rightWingSeats = [];
+
+        displayPlayers.forEach((player, idx) => {
+          const safeName = escapeHtml(player.nickname || player.uniqueId);
+          const fallbackUri = createFallbackAvatarDataUri(player.nickname || player.uniqueId);
+          const isElim = Boolean(player.isEliminated);
+          const hasAnswer = Boolean(player.currentAnswer);
+          const isCorrectReveal = isEnded && !isElim && player.currentAnswer === correctAnswer;
+          const seatCode = String(idx + 1).padStart(2, '0');
+
+          const answerTagHtml = hasAnswer
+            ? `<span class="answer-tag ${isCorrectReveal ? 'correct-tag' : ''}">${escapeHtml(player.currentAnswer)}</span>`
+            : '';
+
+          const xOverlayHtml = isElim
+            ? `<div class="eliminated-x-overlay" aria-label="Đã bị loại">
+                 <svg viewBox="0 0 64 64" fill="none">
+                   <path d="M16 16L48 48M48 16L16 48" stroke="#EF4444" stroke-width="10" stroke-linecap="round" />
+                 </svg>
+               </div>`
+            : '';
+
+          const seatHtml = `
+            <div class="desk-seat ${isElim ? 'eliminated' : ''}">
+              <div class="seat-number">Bàn ${seatCode}</div>
+              <div class="avatar-frame">
+                <img
+                  class="avatar-img"
+                  src="${escapeHtml(player.avatar)}"
+                  alt="${safeName}"
+                  referrerpolicy="no-referrer"
+                  onerror="this.onerror=null;this.src='${fallbackUri}'"
+                />
+                ${xOverlayHtml}
+                ${answerTagHtml}
+              </div>
+              <div class="desk-surface">
+                <div class="player-name" title="${safeName}">${safeName}</div>
+              </div>
+            </div>
+          `;
+
+          const posInRow = idx % (colsPerSide * 2);
+          if (posInRow < colsPerSide) {
+            leftWingSeats.push(seatHtml);
+          } else {
+            rightWingSeats.push(seatHtml);
+          }
+        });
+
+        playersGrid.innerHTML = `
+          <div class="classroom-floor ${isDense ? 'dense' : ''}">
+            <div class="classroom-wing">${leftWingSeats.join('')}</div>
+            <div class="classroom-aisle" aria-hidden="true"></div>
+            <div class="classroom-wing">${rightWingSeats.join('')}</div>
+          </div>
+        `;
+      }
+
+      socket.on('sync_state', (state) => {
+        renderState(state);
+      });
+
+      socket.on('timer_tick', ({ timeLeft }) => {
+        if (!latestState) return;
+        latestState.timeLeft = timeLeft;
+        updateTimerVisuals(timeLeft, latestState.questionDuration, latestState.phase);
+        if (latestState.phase === 'QUESTION') {
+          phaseStatus.textContent =
+            timeLeft <= 5 ? 'Sắp hết giờ — Chốt đáp án ngay!' : 'Đang nhận đáp án A, B, C, D';
+        }
+      });
+
+      socket.on('reveal_answer', () => {
+        bellCrest.classList.remove('ringing');
+        void bellCrest.offsetWidth;
+        bellCrest.classList.add('ringing');
+      });
+
+      socket.on('game_winner', () => {
+        bellCrest.classList.remove('ringing');
+        void bellCrest.offsetWidth;
+        bellCrest.classList.add('ringing');
+      });
+
+      socket.on('connect', () => {
+        socket.emit('request_sync');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Điều khiển Rung Chuông Vàng — Admin Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+      :root {
+        --bg-canvas: #0b1120;
+        --bg-surface: #111827;
+        --bg-input: #0f172a;
+        --border-hairline: #1e293b;
+        --border-strong: #334155;
+        --ink-primary: #f8fafc;
+        --ink-secondary: #cbd5e1;
+        --ink-muted: #94a3b8;
+        --accent-gold: #f59e0b;
+        --accent-gold-hover: #d97706;
+        --accent-blue: #2563eb;
+        --accent-blue-hover: #1d4ed8;
+        --accent-emerald: #10b981;
+        --accent-crimson: #dc2626;
+        --accent-crimson-hover: #b91c1c;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        min-height: 100vh;
+        background-color: var(--bg-canvas);
+        color: var(--ink-primary);
+        font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Top Bar Contract: 3 zones separated by gap */
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 32px;
+        padding: 16px 28px;
+        background: var(--bg-surface);
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .brand-wordmark {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        color: var(--ink-primary);
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .top-nav {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .nav-link {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink-muted);
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: color 0.15s ease;
+      }
+
+      .nav-link:hover,
+      .nav-link.active {
+        color: var(--ink-primary);
+      }
+
+      .top-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 16px;
+        min-height: 40px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #0b1120;
+        background: var(--accent-gold);
+        border-radius: 8px;
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background-color 0.15s ease;
+      }
+
+      .top-action-btn:hover {
+        background: var(--accent-gold-hover);
+      }
+
+      /* Main Layout */
+      .container {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 24px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .summary-strip {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid var(--border-hairline);
+      }
+
+      .page-heading {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--ink-primary);
+      }
+
+      .summary-meta {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: var(--ink-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .mono-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      /* 4 Functional Cards Grid */
+      .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+
+      @media (max-width: 900px) {
+        .cards-grid {
+          grid-template-columns: 1fr;
+        }
+        .top-nav {
+          display: none;
+        }
+      }
+
+      .card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 14px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .card-header {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .card-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .card-desc {
+        font-size: 14px;
+        color: var(--ink-muted);
+      }
+
+      /* Form & Buttons */
+      .field-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .text-input {
+        flex: 1;
+        min-width: 200px;
+        min-height: 44px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        background: var(--bg-input);
+        color: var(--ink-primary);
+        font-family: inherit;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.15s ease;
+      }
+
+      .text-input:focus-visible {
+        border-color: var(--accent-gold);
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        flex-shrink: 0;
+        transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+      }
+
+      .btn:focus-visible {
+        outline: 2px solid var(--accent-gold);
+        outline-offset: 2px;
+      }
+
+      .btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--accent-blue);
+        color: #ffffff;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: var(--accent-blue-hover);
+      }
+
+      .btn-gold {
+        background: var(--accent-gold);
+        color: #0b1120;
+      }
+
+      .btn-gold:hover:not(:disabled) {
+        background: var(--accent-gold-hover);
+      }
+
+      .btn-secondary {
+        background: #1e293b;
+        color: var(--ink-primary);
+        border-color: var(--border-strong);
+      }
+
+      .btn-secondary:hover:not(:disabled) {
+        background: #283548;
+      }
+
+      .btn-secondary.is-active {
+        background: rgba(245, 158, 11, 0.16);
+        border-color: var(--accent-gold);
+        color: #fde68a;
+      }
+
+      .btn-danger {
+        background: var(--accent-crimson);
+        color: #ffffff;
+      }
+
+      .btn-danger:hover:not(:disabled) {
+        background: var(--accent-crimson-hover);
+      }
+
+      /* Status Text Line (Zero-pill) */
+      .status-line {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ink-muted);
+        padding-top: 4px;
+      }
+
+      .status-line.connected {
+        color: #34d399;
+      }
+
+      .status-line.connecting {
+        color: #fbbf24;
+      }
+
+      .status-line.error {
+        color: #f87171;
+      }
+
+      /* Game Controls List */
+      .question-buttons-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      @media (max-width: 560px) {
+        .question-buttons-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .question-preview-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      .question-preview-item {
+        font-size: 13px;
+        color: var(--ink-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .question-preview-item strong {
+        color: var(--ink-secondary);
+      }
+
+      .divider-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      /* System Log Feed */
+      .log-card {
+        grid-column: 1 / -1;
+      }
+
+      .log-box {
+        height: 280px;
+        overflow-y: auto;
+        background: #070b14;
+        border: 1px solid var(--border-hairline);
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        line-height: 1.65;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .log-entry {
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+      }
+
+      .log-time {
+        color: #64748b;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+
+      .log-msg {
+        color: #e2e8f0;
+        word-break: break-word;
+      }
+
+      .log-entry.level-success .log-msg {
+        color: #34d399;
+      }
+
+      .log-entry.level-warning .log-msg {
+        color: #fbbf24;
+      }
+
+      .log-entry.level-error .log-msg {
+        color: #f87171;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top-bar">
+      <a href="/" class="brand-wordmark">Rung Chuông Vàng</a>
+      <nav class="top-nav" aria-label="Điều hướng chính">
+        <a href="/admin" class="nav-link active">Bảng điều khiển</a>
+        <a href="/overlay" class="nav-link" target="_blank" rel="noopener">Màn hình OBS</a>
+        <a href="/" class="nav-link">Studio tổng hợp</a>
+      </nav>
+      <a href="/overlay" class="top-action-btn" target="_blank" rel="noopener">Mở Overlay OBS</a>
+    </header>
+
+    <main class="container">
+      <section class="summary-strip">
+        <h1 class="page-heading">Bảng Điều Khiển Livestream</h1>
+        <div class="summary-meta">
+          <span>Trên sàn: <span id="statRemaining" class="mono-value">0 / 0</span></span>
+          <span aria-hidden="true">·</span>
+          <span>Trạng thái: <span id="statPhase" class="mono-value">Chờ phát câu hỏi</span></span>
+          <span aria-hidden="true">·</span>
+          <span>Đếm ngược: <span id="statTimer" class="mono-value">15s</span></span>
+        </div>
+      </section>
+
+      <section class="cards-grid">
+        <!-- Thẻ 1: Kết nối TikTok Live & Chọn ngẫu nhiên thí sinh -->
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">1. Kết nối TikTok Live & Tuyển thí sinh</h2>
+            <p class="card-desc">
+              Kết nối phòng Live để ghi nhận toàn bộ người bình luận, sau đó chọn ngẫu nhiên thí sinh lên sàn đấu.
+            </p>
+          </div>
+          <form id="tiktokConnectForm" class="field-row">
+            <input
+              id="tiktokUsernameInput"
+              class="text-input"
+              type="text"
+              placeholder="Nhập username (ví dụ: @tenkenh)"
+              autocomplete="off"
+              aria-label="TikTok Username"
+            />
+            <button id="connectBtn" type="submit" class="btn btn-primary">Kết nối TikTok Live</button>
+            <button id="disconnectBtn" type="button" class="btn btn-secondary" hidden>Ngắt kết nối</button>
+          </form>
+          <div id="tiktokStatusLine" class="status-line">
+            Trạng thái TikTok: Chưa kết nối
+          </div>
+
+          <div class="divider-row" style="flex-wrap: wrap;">
+            <span class="card-desc">
+              Đã ghi nhận <strong id="liveCommentersCount" class="mono-value">0</strong> người bình luận trong phiên Live
+            </span>
+            <button id="clearPoolBtn" type="button" class="btn btn-secondary" style="min-height: 36px; padding: 6px 12px; font-size: 12px;">
+              Xóa pool
+            </button>
+          </div>
+
+          <div class="field-row">
+            <input
+              id="randomCountInput"
+              class="text-input"
+              type="number"
+              min="1"
+              max="100"
+              value="15"
+              style="max-width: 110px; min-width: 90px;"
+              aria-label="Số lượng thí sinh chọn ngẫu nhiên"
+            />
+            <button id="pickRandomBtn" type="button" class="btn btn-gold">
+              Chọn ngẫu nhiên từ bình luận
+            </button>
+            <button id="toggleRosterLockBtn" type="button" class="btn btn-secondary">
+              Khóa sàn đấu
+            </button>
+          </div>
+          <div id="rosterStatusLine" class="status-line">
+            Chế độ hiện tại: Nhận tự do qua bình luận A, B, C, D
+          </div>
+        </article>
+
+        <!-- Thẻ 2: Điều khiển câu hỏi & Reset -->
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">2. Điều khiển trò chơi</h2>
+            <p class="card-desc">
+              Phát lần lượt các câu hỏi (đếm ngược 15s). Người cuối cùng còn lại trên sàn là Quán quân Rung Chuông Vàng.
+            </p>
+          </div>
+
+          <div class="question-buttons-grid">
+            <button id="btnQ1" type="button" class="btn btn-secondary" data-q-index="0">Phát Câu 1</button>
+            <button id="btnQ2" type="button" class="btn btn-secondary" data-q-index="1">Phát Câu 2</button>
+            <button id="btnQ3" type="button" class="btn btn-secondary" data-q-index="2">Phát Câu 3</button>
+          </div>
+
+          <div id="winnerBannerLine" class="status-line connected" hidden></div>
+
+          <div id="tiebreakControls" class="divider-row" style="flex-wrap: wrap;" hidden>
+            <span class="card-desc">Nhiều người cùng trụ hạng — chốt 1 Quán quân cuối cùng:</span>
+            <div class="field-row">
+              <button id="tiebreakFastestBtn" type="button" class="btn btn-gold">Nhanh nhất</button>
+              <button id="tiebreakRandomBtn" type="button" class="btn btn-secondary">Bốc thăm 1 người</button>
+            </div>
+          </div>
+
+          <div id="questionPreviewList" class="question-preview-list"></div>
+
+          <div class="divider-row">
+            <span class="card-desc">Xóa toàn bộ người chơi trên sàn và đưa về trạng thái ban đầu</span>
+            <button id="resetGameBtn" type="button" class="btn btn-danger">Reset Ván Mới</button>
+          </div>
+        </article>
+
+        <!-- Thẻ 3: Test nhanh -->
+        <article class="card">
+          <div class="card-header">
+            <h2 class="card-title">3. Test nhanh (Giả lập bình luận)</h2>
+            <p class="card-desc">
+              Tạo bình luận Live ngẫu nhiên hoặc gửi 15 đáp án A, B, C, D rải rác cách nhau 200ms để kiểm thử ngay.
+            </p>
+          </div>
+          <div class="field-row">
+            <button id="simulateChatBtn" type="button" class="btn btn-gold">
+              Giả lập 15 người bình luận
+            </button>
+            <button id="simulatePoolBtn" type="button" class="btn btn-secondary">
+              Giả lập 25 bình luận Live
+            </button>
+          </div>
+          <div id="simulateStatusLine" class="status-line">
+            Mẹo: Nhấn "Giả lập 25 bình luận Live" rồi chọn ngẫu nhiên 15 thí sinh, hoặc nhấn "Phát Câu 1" rồi "Giả lập 15 người bình luận".
+          </div>
+        </article>
+
+        <!-- Thẻ 4: Nhật ký hệ thống -->
+        <article class="card log-card">
+          <div class="card-header">
+            <h2 class="card-title">4. Nhật ký hệ thống</h2>
+            <p class="card-desc">Theo dõi trạng thái kết nối TikTok Live, bình luận hợp lệ và kết quả từng câu hỏi.</p>
+          </div>
+          <div id="systemLogBox" class="log-box" role="log" aria-live="polite"></div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const socket = io();
+
+      const tiktokConnectForm = document.getElementById('tiktokConnectForm');
+      const tiktokUsernameInput = document.getElementById('tiktokUsernameInput');
+      const connectBtn = document.getElementById('connectBtn');
+      const disconnectBtn = document.getElementById('disconnectBtn');
+      const tiktokStatusLine = document.getElementById('tiktokStatusLine');
+      const liveCommentersCount = document.getElementById('liveCommentersCount');
+      const clearPoolBtn = document.getElementById('clearPoolBtn');
+      const randomCountInput = document.getElementById('randomCountInput');
+      const pickRandomBtn = document.getElementById('pickRandomBtn');
+      const toggleRosterLockBtn = document.getElementById('toggleRosterLockBtn');
+      const rosterStatusLine = document.getElementById('rosterStatusLine');
+
+      const questionButtons = [
+        document.getElementById('btnQ1'),
+        document.getElementById('btnQ2'),
+        document.getElementById('btnQ3'),
+      ];
+      const winnerBannerLine = document.getElementById('winnerBannerLine');
+      const tiebreakControls = document.getElementById('tiebreakControls');
+      const tiebreakFastestBtn = document.getElementById('tiebreakFastestBtn');
+      const tiebreakRandomBtn = document.getElementById('tiebreakRandomBtn');
+      const questionPreviewList = document.getElementById('questionPreviewList');
+      const resetGameBtn = document.getElementById('resetGameBtn');
+      const simulateChatBtn = document.getElementById('simulateChatBtn');
+      const simulatePoolBtn = document.getElementById('simulatePoolBtn');
+      const simulateStatusLine = document.getElementById('simulateStatusLine');
+
+      const statRemaining = document.getElementById('statRemaining');
+      const statPhase = document.getElementById('statPhase');
+      const statTimer = document.getElementById('statTimer');
+      const systemLogBox = document.getElementById('systemLogBox');
+
+      let isSimulating = false;
+      let latestState = null;
+
+      const MOCK_PLAYERS = [
+        { uniqueId: 'minhanh_99', nickname: 'Minh Anh' },
+        { uniqueId: 'tuankiet_hn', nickname: 'Tuấn Kiệt' },
+        { uniqueId: 'baongoc_2k', nickname: 'Bảo Ngọc' },
+        { uniqueId: 'hoangnam_vn', nickname: 'Hoàng Nam' },
+        { uniqueId: 'thao_vy_live', nickname: 'Thảo Vy' },
+        { uniqueId: 'duc_thinh_pro', nickname: 'Đức Thịnh' },
+        { uniqueId: 'khanh_linh_04', nickname: 'Khánh Linh' },
+        { uniqueId: 'quang_huy_tt', nickname: 'Quang Huy' },
+        { uniqueId: 'nhu_quynh_sg', nickname: 'Như Quỳnh' },
+        { uniqueId: 'gia_bao_gaming', nickname: 'Gia Bảo' },
+        { uniqueId: 'phuong_anh_98', nickname: 'Phương Anh' },
+        { uniqueId: 'thanh_dat_01', nickname: 'Thành Đạt' },
+        { uniqueId: 'yen_nhi_cute', nickname: 'Yến Nhi' },
+        { uniqueId: 'trong_nghia_dn', nickname: 'Trọng Nghĩa' },
+        { uniqueId: 'hai_dang_live', nickname: 'Hải Đăng' },
+        { uniqueId: 'kim_ngan_07', nickname: 'Kim Ngân' },
+        { uniqueId: 'anh_khoa_tv', nickname: 'Anh Khoa' },
+        { uniqueId: 'my_duyen_96', nickname: 'Mỹ Duyên' },
+        { uniqueId: 'huu_phuc_hp', nickname: 'Hữu Phúc' },
+        { uniqueId: 'ngoc_tram_22', nickname: 'Ngọc Trâm' },
+        { uniqueId: 'tien_dung_fc', nickname: 'Tiến Dũng' },
+        { uniqueId: 'lan_huong_hn', nickname: 'Lan Hương' },
+        { uniqueId: 'quoc_bao_05', nickname: 'Quốc Bảo' },
+        { uniqueId: 'hong_nhung_live', nickname: 'Hồng Nhung' },
+        { uniqueId: 'nhat_minh_vip', nickname: 'Nhật Minh' },
+      ];
+
+      const LIVE_CHAT_PHRASES = [
+        'Cho em tham gia với ạ!',
+        'Em xin 1 slot lên sàn',
+        'Chào cả nhà đang xem live',
+        'Rung chuông vàng hay quá',
+        'Chơi thôi mọi người ơi',
+        'Em sẵn sàng rồi',
+        'Chọn em đi ad ơi',
+      ];
+
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+      }
+
+      function appendLogEntry(entry) {
+        if (!entry) return;
+        const row = document.createElement('div');
+        row.className = `log-entry level-${entry.level || 'info'}`;
+        row.innerHTML = `<span class="log-time">[${escapeHtml(entry.timestamp)}]</span><span class="log-msg">${escapeHtml(entry.message)}</span>`;
+        systemLogBox.appendChild(row);
+        while (systemLogBox.children.length > 100) {
+          systemLogBox.removeChild(systemLogBox.firstChild);
+        }
+        systemLogBox.scrollTop = systemLogBox.scrollHeight;
+      }
+
+      function renderState(state) {
+        if (!state) return;
+        latestState = state;
+
+        // Cập nhật summary bar
+        statRemaining.textContent = `${state.stats.remaining} / ${state.stats.total}`;
+        statTimer.textContent = state.phase === 'IDLE' ? '15s' : `${state.timeLeft}s`;
+
+        if (state.phase === 'IDLE') {
+          statPhase.textContent = 'Chờ phát câu hỏi';
+        } else if (state.phase === 'QUESTION') {
+          statPhase.textContent = `Đang thi Câu ${state.currentQuestionIndex + 1}`;
+        } else if (state.phase === 'WINNER') {
+          statPhase.textContent = `Quán quân: ${state.winner?.nickname || ''}`;
+        } else if (state.phase === 'GAME_OVER') {
+          statPhase.textContent = 'Hết thí sinh trụ hạng';
+        } else {
+          statPhase.textContent = `Công bố đáp án ${state.correctAnswer}`;
+        }
+
+        // Cập nhật pool bình luận & khóa sàn
+        liveCommentersCount.textContent = String(state.liveCommentersCount || 0);
+        if (state.rosterLocked) {
+          rosterStatusLine.className = 'status-line connecting';
+          rosterStatusLine.textContent = 'Chế độ hiện tại: Đã khóa sàn (chỉ thí sinh được chọn mới có thể trả lời)';
+          toggleRosterLockBtn.textContent = 'Mở nhận tự do';
+        } else {
+          rosterStatusLine.className = 'status-line';
+          rosterStatusLine.textContent = 'Chế độ hiện tại: Nhận tự do qua bình luận A, B, C, D';
+          toggleRosterLockBtn.textContent = 'Khóa sàn đấu';
+        }
+
+        // Hiển thị Quán quân hoặc nút chốt Quán quân nếu còn nhiều người trụ hạng
+        if (state.phase === 'WINNER' && state.winner) {
+          winnerBannerLine.hidden = false;
+          winnerBannerLine.textContent = `Quán quân Rung Chuông Vàng: ${state.winner.nickname} (@${state.winner.uniqueId}) — Người cuối cùng còn lại!`;
+        } else {
+          winnerBannerLine.hidden = true;
+        }
+
+        const showTiebreak =
+          state.phase === 'REVEAL' && state.stats.remaining > 1;
+        tiebreakControls.hidden = !showTiebreak;
+
+        // Cập nhật trạng thái TikTok
+        const tt = state.tiktok || { status: 'disconnected', username: '', errorMessage: '' };
+        tiktokStatusLine.className = 'status-line';
+        if (tt.status === 'connected') {
+          tiktokStatusLine.classList.add('connected');
+          tiktokStatusLine.textContent = `Trạng thái TikTok: Đã kết nối phòng Live @${tt.username}`;
+          disconnectBtn.hidden = false;
+        } else if (tt.status === 'connecting') {
+          tiktokStatusLine.classList.add('connecting');
+          tiktokStatusLine.textContent = `Trạng thái TikTok: Đang kết nối tới @${tt.username}...`;
+          disconnectBtn.hidden = false;
+        } else if (tt.status === 'error') {
+          tiktokStatusLine.classList.add('error');
+          tiktokStatusLine.textContent = `Trạng thái TikTok: Lỗi (${tt.errorMessage || 'Không thể kết nối'})`;
+          disconnectBtn.hidden = true;
+        } else {
+          tiktokStatusLine.textContent = 'Trạng thái TikTok: Chưa kết nối';
+          disconnectBtn.hidden = true;
+        }
+
+        // Cập nhật nút câu hỏi
+        questionButtons.forEach((btn, idx) => {
+          btn.classList.toggle('is-active', state.currentQuestionIndex === idx);
+        });
+
+        // Danh sách tóm tắt câu hỏi
+        if (Array.isArray(state.questionsMeta)) {
+          questionPreviewList.innerHTML = state.questionsMeta
+            .map(
+              (q) =>
+                `<div class="question-preview-item" title="${escapeHtml(q.question)}"><strong>Câu ${q.index + 1} (${escapeHtml(q.topic)}):</strong> ${escapeHtml(q.question)}</div>`
+            )
+            .join('');
+        }
+      }
+
+      // 1. Kết nối TikTok Live & Chọn ngẫu nhiên thí sinh
+      tiktokConnectForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const username = tiktokUsernameInput.value.trim();
+        socket.emit('connect_tiktok', { username });
+      });
+
+      disconnectBtn.addEventListener('click', () => {
+        socket.emit('disconnect_tiktok');
+      });
+
+      pickRandomBtn.addEventListener('click', () => {
+        const count = Number(randomCountInput.value) || 15;
+        socket.emit('pick_random_players', { count });
+      });
+
+      toggleRosterLockBtn.addEventListener('click', () => {
+        const nextLocked = !(latestState && latestState.rosterLocked);
+        socket.emit('set_roster_lock', { locked: nextLocked });
+      });
+
+      clearPoolBtn.addEventListener('click', () => {
+        socket.emit('clear_commenters');
+      });
+
+      // 2. Phát Câu 1, 2, 3, Chốt quán quân & Reset
+      questionButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.dataset.qIndex);
+          socket.emit('start_question', { questionIndex: idx });
+        });
+      });
+
+      tiebreakFastestBtn.addEventListener('click', () => {
+        socket.emit('declare_tiebreak_winner', { mode: 'fastest' });
+      });
+
+      tiebreakRandomBtn.addEventListener('click', () => {
+        socket.emit('declare_tiebreak_winner', { mode: 'random' });
+      });
+
+      resetGameBtn.addEventListener('click', () => {
+        socket.emit('reset_game');
+      });
+
+      // 3. Giả lập 15 người bình luận A, B, C, D cách nhau 200ms
+      simulateChatBtn.addEventListener('click', () => {
+        if (isSimulating) return;
+        isSimulating = true;
+        simulateChatBtn.disabled = true;
+        simulatePoolBtn.disabled = true;
+        simulateStatusLine.textContent = 'Đang gửi 15 bình luận giả lập A, B, C, D (200ms/lượt)...';
+
+        const activeSurvivors =
+          latestState?.rosterLocked && Array.isArray(latestState?.players)
+            ? latestState.players.filter((p) => !p.isEliminated)
+            : [];
+        const batch =
+          activeSurvivors.length > 0 ? activeSurvivors.slice(0, 15) : MOCK_PLAYERS.slice(0, 15);
+
+        const choices = ['A', 'B', 'C', 'D'];
+        batch.forEach((player, i) => {
+          setTimeout(() => {
+            const randomChoice = choices[Math.floor(Math.random() * choices.length)];
+            socket.emit('simulate_chat', {
+              uniqueId: player.uniqueId,
+              nickname: player.nickname,
+              comment: randomChoice,
+            });
+
+            if (i === batch.length - 1) {
+              isSimulating = false;
+              simulateChatBtn.disabled = false;
+              simulatePoolBtn.disabled = false;
+              simulateStatusLine.textContent = `Đã gửi xong ${batch.length} bình luận đáp án!`;
+            }
+          }, i * 200);
+        });
+      });
+
+      // Giả lập 25 người bình luận trong phiên Live để test chọn ngẫu nhiên
+      simulatePoolBtn.addEventListener('click', () => {
+        if (isSimulating) return;
+        isSimulating = true;
+        simulateChatBtn.disabled = true;
+        simulatePoolBtn.disabled = true;
+        simulateStatusLine.textContent = 'Đang ghi nhận 25 người xem bình luận vào phiên Live...';
+
+        MOCK_PLAYERS.forEach((player, i) => {
+          setTimeout(() => {
+            const phrase = LIVE_CHAT_PHRASES[i % LIVE_CHAT_PHRASES.length];
+            socket.emit('simulate_chat', {
+              uniqueId: player.uniqueId,
+              nickname: player.nickname,
+              comment: phrase,
+            });
+
+            if (i === MOCK_PLAYERS.length - 1) {
+              isSimulating = false;
+              simulateChatBtn.disabled = false;
+              simulatePoolBtn.disabled = false;
+              simulateStatusLine.textContent =
+                'Đã ghi nhận 25 người bình luận! Hãy nhấn "Chọn ngẫu nhiên từ bình luận" ở Thẻ 1.';
+            }
+          }, i * 80);
+        });
+      });
+
+      // Socket listeners
+      socket.on('init_logs', (logs) => {
+        systemLogBox.innerHTML = '';
+        (logs || []).forEach(appendLogEntry);
+      });
+
+      socket.on('system_log', (entry) => {
+        appendLogEntry(entry);
+      });
+
+      socket.on('sync_state', (state) => {
+        renderState(state);
+      });
+
+      socket.on('timer_tick', ({ timeLeft }) => {
+        statTimer.textContent = `${timeLeft}s`;
+      });
+
+      socket.on('connect', () => {
+        socket.emit('request_sync');
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "tiktok-rung-chuong-vang",
+  "description": "Ứng dụng mô phỏng trò chơi tương tác livestream Rung Chuông Vàng thời gian thực bằng Socket.io và TikTok Live Connector.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
