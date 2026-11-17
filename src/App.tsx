@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Bell, Check, RotateCcw, Shuffle, Trophy, Users, X } from 'lucide-react';
+import { Bell, Check, Download, RotateCcw, Shuffle, Trophy, Upload, Users, Volume2, VolumeX, X } from 'lucide-react';
 
 type AnswerChoice = 'A' | 'B' | 'C' | 'D';
 type GamePhase = 'IDLE' | 'QUESTION' | 'REVEAL' | 'WINNER' | 'GAME_OVER';
@@ -26,6 +26,8 @@ interface QuestionMeta {
   id: number;
   topic: string;
   question: string;
+  options?: Record<AnswerChoice, string>;
+  correctAnswer?: AnswerChoice;
 }
 
 interface CurrentQuestion {
@@ -61,6 +63,13 @@ interface GameState {
   isAcceptingAnswers: boolean;
   correctAnswer: AnswerChoice | null;
   rosterLocked: boolean;
+  autoMode: boolean;
+  autoPickCount: number;
+  autoTransitionSeconds: number;
+  shuffleMode: boolean;
+  autoStatus: string;
+  voiceEnabled: boolean;
+  soundEnabled: boolean;
   winner: Player | null;
   liveCommentersCount: number;
   stats: GameStats;
@@ -125,6 +134,25 @@ export default function App() {
   const socketRef = useRef<Socket | null>(null);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
   const simulationTimersRef = useRef<number[]>([]);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const soundEnabledRef = useRef(true);
+  const voiceEnabledRef = useRef(true);
+  const speechQueueRef = useRef<Array<{ text: string; rate: number }>>([]);
+  const isSpeakingRef = useRef(false);
+  const activeTtsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechSafetyTimerRef = useRef<number | null>(null);
+  const speechRetryTimerRef = useRef<number | null>(null);
+  const speechSessionIdRef = useRef<number>(0);
+  const speechVoicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const pendingLateNamesRef = useRef<string[]>([]);
+  const lateBatchTimerRef = useRef<number | null>(null);
+  const waitlistTimerRef = useRef<number | null>(null);
+  const lastLateSpeechAtRef = useRef<number>(0);
+  const latestPhaseRef = useRef<GamePhase>('IDLE');
+  const latestTimeLeftRef = useRef<number>(0);
+  const fireworksCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const speakRef = useRef<((text: string, priority?: 'high' | 'normal', rate?: number) => void) | null>(null);
+  const stopAllSpeechRef = useRef<(() => void) | null>(null);
 
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -133,8 +161,317 @@ export default function App() {
   const [randomCount, setRandomCount] = useState(15);
   const [isSimulating, setIsSimulating] = useState(false);
   const [lastEventNotice, setLastEventNotice] = useState<string>('');
+  const [waitlistBannerText, setWaitlistBannerText] = useState<string>('');
+  const [newTopic, setNewTopic] = useState('');
+  const [newQuestion, setNewQuestion] = useState('');
+  const [newOptA, setNewOptA] = useState('');
+  const [newOptB, setNewOptB] = useState('');
+  const [newOptC, setNewOptC] = useState('');
+  const [newOptD, setNewOptD] = useState('');
+  const [newCorrect, setNewCorrect] = useState<AnswerChoice>('A');
+  const [questionFormMsg, setQuestionFormMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
+  const [importFileMsg, setImportFileMsg] = useState<{ text: string; isError: boolean } | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const soundEnabled = gameState?.soundEnabled ?? true;
+  const voiceEnabled = gameState?.voiceEnabled ?? true;
 
   useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+    if (!voiceEnabled) {
+      stopAllSpeechRef.current?.();
+    }
+  }, [voiceEnabled]);
+
+  useEffect(() => {
+    function ensureAudioContext(): AudioContext | null {
+      if (!soundEnabledRef.current) return null;
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextClass) return null;
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContextClass();
+      }
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      return audioCtxRef.current;
+    }
+
+    function playTone(
+      freq: number,
+      startOffset: number,
+      duration: number,
+      type: OscillatorType = 'sine',
+      volume = 0.14
+    ) {
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime + startOffset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + duration + 0.02);
+    }
+
+    function playQuestionStartSfx() {
+      if (!soundEnabledRef.current) return;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        playTone(freq, i * 0.08, 0.28, 'triangle', 0.14);
+      });
+    }
+
+    function playCountdownTickSfx(isFinalSecond: boolean) {
+      if (!soundEnabledRef.current) return;
+      playTone(isFinalSecond ? 1174.66 : 880, 0, 0.09, 'square', 0.06);
+    }
+
+    function playRevealSfx(eliminatedCount: number) {
+      if (!soundEnabledRef.current) return;
+      playTone(659.25, 0, 0.35, 'triangle', 0.15);
+      playTone(987.77, 0.08, 0.45, 'sine', 0.14);
+      if (eliminatedCount > 0) {
+        playTone(220, 0.22, 0.32, 'sawtooth', 0.06);
+      }
+    }
+
+    function playWinnerSfx() {
+      if (!soundEnabledRef.current) return;
+      [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((freq, i) => {
+        playTone(freq, i * 0.1, 0.45, 'triangle', 0.16);
+      });
+      playTone(1567.98, 0.52, 0.9, 'sine', 0.18);
+    }
+
+    function playLateCommenterSfx() {
+      if (!soundEnabledRef.current) return;
+      playTone(783.99, 0, 0.18, 'sine', 0.1);
+      playTone(987.77, 0.1, 0.24, 'sine', 0.11);
+    }
+
+    function loadVoices() {
+      if ('speechSynthesis' in window) {
+        speechVoicesRef.current = window.speechSynthesis.getVoices() || [];
+      }
+    }
+    if ('speechSynthesis' in window) {
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    function stopAllSpeech() {
+      speechSessionIdRef.current += 1;
+      speechQueueRef.current = [];
+      isSpeakingRef.current = false;
+      if (speechSafetyTimerRef.current) {
+        window.clearTimeout(speechSafetyTimerRef.current);
+        speechSafetyTimerRef.current = null;
+      }
+      if (speechRetryTimerRef.current) {
+        window.clearTimeout(speechRetryTimerRef.current);
+        speechRetryTimerRef.current = null;
+      }
+      if (activeTtsAudioRef.current) {
+        try {
+          activeTtsAudioRef.current.onended = null;
+          activeTtsAudioRef.current.onerror = null;
+          activeTtsAudioRef.current.pause();
+          activeTtsAudioRef.current.removeAttribute('src');
+          activeTtsAudioRef.current.load();
+        } catch {}
+        activeTtsAudioRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+
+    function speakWithWebSpeech(text: string, rate: number, sessionId: number, onDone: () => void) {
+      if (sessionId !== speechSessionIdRef.current) return;
+      if (!('speechSynthesis' in window)) {
+        onDone();
+        return;
+      }
+      const voices =
+        speechVoicesRef.current.length > 0
+          ? speechVoicesRef.current
+          : window.speechSynthesis.getVoices() || [];
+      const viVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('vi'));
+      // Tuyệt đối không dùng giọng mặc định tiếng Anh nếu hệ điều hành không có giọng tiếng Việt
+      if (!viVoice) {
+        onDone();
+        return;
+      }
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'vi-VN';
+        utterance.voice = viVoice;
+        utterance.rate = rate;
+        utterance.pitch = 1.05;
+
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          if (speechSafetyTimerRef.current) {
+            window.clearTimeout(speechSafetyTimerRef.current);
+            speechSafetyTimerRef.current = null;
+          }
+          if (sessionId === speechSessionIdRef.current) {
+            onDone();
+          }
+        };
+
+        utterance.onend = finish;
+        utterance.onerror = finish;
+        speechSafetyTimerRef.current = window.setTimeout(finish, 12000);
+        window.speechSynthesis.speak(utterance);
+      } catch {
+        if (sessionId === speechSessionIdRef.current) {
+          onDone();
+        }
+      }
+    }
+
+    function processSpeechQueue() {
+      if (!voiceEnabledRef.current) {
+        stopAllSpeech();
+        return;
+      }
+      if (isSpeakingRef.current || speechQueueRef.current.length === 0) return;
+
+      const next = speechQueueRef.current.shift();
+      if (!next) return;
+      const sessionId = speechSessionIdRef.current;
+      isSpeakingRef.current = true;
+
+      const advanceQueue = () => {
+        if (sessionId !== speechSessionIdRef.current) return;
+        isSpeakingRef.current = false;
+        if (speechSafetyTimerRef.current) {
+          window.clearTimeout(speechSafetyTimerRef.current);
+          speechSafetyTimerRef.current = null;
+        }
+        if (speechRetryTimerRef.current) {
+          window.clearTimeout(speechRetryTimerRef.current);
+          speechRetryTimerRef.current = null;
+        }
+        processSpeechQueue();
+      };
+
+      const playTtsAttempt = (attempt: number) => {
+        if (sessionId !== speechSessionIdRef.current || !voiceEnabledRef.current) return;
+        try {
+          const audio = new Audio(`/api/tts?text=${encodeURIComponent(next.text)}`);
+          activeTtsAudioRef.current = audio;
+          audio.playbackRate = next.rate || 1.0;
+
+          let settled = false;
+          const handleFailure = () => {
+            if (settled || sessionId !== speechSessionIdRef.current) return;
+            settled = true;
+            audio.onended = null;
+            audio.onerror = null;
+            activeTtsAudioRef.current = null;
+            if (speechSafetyTimerRef.current) {
+              window.clearTimeout(speechSafetyTimerRef.current);
+              speechSafetyTimerRef.current = null;
+            }
+            if (attempt === 0) {
+              speechRetryTimerRef.current = window.setTimeout(() => {
+                speechRetryTimerRef.current = null;
+                if (sessionId === speechSessionIdRef.current) {
+                  playTtsAttempt(1);
+                }
+              }, 220);
+              return;
+            }
+            speakWithWebSpeech(next.text, next.rate, sessionId, advanceQueue);
+          };
+
+          audio.onended = () => {
+            if (settled || sessionId !== speechSessionIdRef.current) return;
+            settled = true;
+            audio.onended = null;
+            audio.onerror = null;
+            activeTtsAudioRef.current = null;
+            advanceQueue();
+          };
+          audio.onerror = handleFailure;
+
+          speechSafetyTimerRef.current = window.setTimeout(() => {
+            if (!settled && sessionId === speechSessionIdRef.current) {
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              try {
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+              } catch {}
+              activeTtsAudioRef.current = null;
+              advanceQueue();
+            }
+          }, 15000);
+
+          const playPromise = audio.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch((err) => {
+              if (sessionId !== speechSessionIdRef.current) return;
+              if (err && err.name === 'AbortError') return;
+              handleFailure();
+            });
+          }
+        } catch {
+          speakWithWebSpeech(next.text, next.rate, sessionId, advanceQueue);
+        }
+      };
+
+      playTtsAttempt(0);
+    }
+
+    function speakVietnamese(text: string, priority: 'high' | 'normal' = 'normal', rate = 1.02) {
+      if (!voiceEnabledRef.current || !text) return;
+
+      if (priority === 'high') {
+        stopAllSpeech();
+        speechQueueRef.current = [{ text, rate }];
+        processSpeechQueue();
+        return;
+      }
+
+      if (speechQueueRef.current.length >= 4) {
+        speechQueueRef.current.shift();
+      }
+      speechQueueRef.current.push({ text, rate });
+      processSpeechQueue();
+    }
+
+    speakRef.current = speakVietnamese;
+    stopAllSpeechRef.current = stopAllSpeech;
+
+    const unlockAudio = () => {
+      if (soundEnabledRef.current) {
+        ensureAudioContext();
+      }
+    };
+    window.addEventListener('pointerdown', unlockAudio, { once: true });
+    window.addEventListener('keydown', unlockAudio, { once: true });
+
     const socket = io({
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -154,11 +491,72 @@ export default function App() {
     });
 
     socket.on('sync_state', (incomingState: GameState) => {
+      latestPhaseRef.current = incomingState.phase;
+      latestTimeLeftRef.current = incomingState.timeLeft;
       setGameState(incomingState);
     });
 
+    socket.on(
+      'auto_status',
+      ({
+        autoMode,
+        autoPickCount,
+        autoTransitionSeconds,
+        shuffleMode,
+        autoStatus,
+      }: {
+        autoMode?: boolean;
+        autoPickCount?: number;
+        autoTransitionSeconds?: number;
+        shuffleMode?: boolean;
+        autoStatus?: string;
+      }) => {
+        setGameState((prev) =>
+          prev
+            ? {
+                ...prev,
+                autoMode: typeof autoMode === 'boolean' ? autoMode : prev.autoMode,
+                autoPickCount: typeof autoPickCount === 'number' ? autoPickCount : prev.autoPickCount,
+                autoTransitionSeconds:
+                  typeof autoTransitionSeconds === 'number'
+                    ? autoTransitionSeconds
+                    : prev.autoTransitionSeconds,
+                shuffleMode: typeof shuffleMode === 'boolean' ? shuffleMode : prev.shuffleMode,
+                autoStatus: typeof autoStatus === 'string' ? autoStatus : prev.autoStatus,
+              }
+            : prev
+        );
+      }
+    );
+
+    socket.on(
+      'import_questions_result',
+      ({ ok, message }: { ok?: boolean; message?: string } = {}) => {
+        setImportFileMsg({
+          text: message || (ok ? 'Nhập file thành công!' : 'Nhập file thất bại.'),
+          isError: !ok,
+        });
+      }
+    );
+
+    socket.on(
+      'question_started',
+      ({ questionIndex, question }: { questionIndex?: number; question?: string } = {}) => {
+        playQuestionStartSfx();
+        if (question) {
+          speakVietnamese(`Câu hỏi số ${(questionIndex ?? 0) + 1}: ${question}`, 'high', 1.04);
+        }
+      }
+    );
+
     socket.on('timer_tick', ({ timeLeft }: { timeLeft: number }) => {
-      setGameState((prev) => (prev ? { ...prev, timeLeft } : prev));
+      latestTimeLeftRef.current = timeLeft;
+      setGameState((prev) => {
+        if (prev?.phase === 'QUESTION' && timeLeft > 0 && timeLeft <= 5) {
+          playCountdownTickSfx(timeLeft === 1);
+        }
+        return prev ? { ...prev, timeLeft } : prev;
+      });
     });
 
     socket.on(
@@ -166,24 +564,79 @@ export default function App() {
       ({
         questionIndex,
         correctAnswer,
+        correctOptionText,
         survivedThisRound,
         eliminatedThisRound,
       }: {
         questionIndex: number;
         correctAnswer: AnswerChoice;
+        correctOptionText?: string;
         survivedThisRound: number;
         eliminatedThisRound: number;
       }) => {
+        playRevealSfx(eliminatedThisRound || 0);
         setLastEventNotice(
           `Câu ${questionIndex + 1} kết thúc · Đáp án đúng: ${correctAnswer} · Còn ${survivedThisRound} người, loại ${eliminatedThisRound} người`
         );
+        if (correctAnswer) {
+          const text = correctOptionText
+            ? `Hết giờ! Đáp án chính xác là ${correctAnswer}, ${correctOptionText}.`
+            : `Hết giờ! Đáp án chính xác là ${correctAnswer}.`;
+          speakVietnamese(text, 'high', 1.0);
+        }
       }
     );
 
-    socket.on('game_winner', ({ winner }: { winner: Player }) => {
+    socket.on('game_winner', ({ winner, reason }: { winner: Player; reason?: string }) => {
+      playWinnerSfx();
       if (winner) {
-        setLastEventNotice(`Quán quân Rung Chuông Vàng: ${winner.nickname} (@${winner.uniqueId})`);
+        const winnerName = winner.nickname || winner.uniqueId;
+        setLastEventNotice(`Quán quân Rung Chuông Vàng: ${winnerName} (@${winner.uniqueId})`);
+        const isAfterReveal = reason === 'last_survivor';
+        speakVietnamese(
+          `Xin chúc mừng ${winnerName}, người chiến thắng cuối cùng đã Rung Chuông Vàng!`,
+          isAfterReveal ? 'normal' : 'high',
+          0.98
+        );
       }
+    });
+
+    socket.on('late_commenter', ({ nickname, uniqueId }: { nickname?: string; uniqueId?: string }) => {
+      const displayName = (nickname || uniqueId || 'bạn').trim();
+      if (!displayName) return;
+
+      pendingLateNamesRef.current.push(displayName);
+      if (lateBatchTimerRef.current) window.clearTimeout(lateBatchTimerRef.current);
+
+      lateBatchTimerRef.current = window.setTimeout(() => {
+        const names = pendingLateNamesRef.current.splice(0, 4);
+        pendingLateNamesRef.current = [];
+        if (names.length === 0) return;
+
+        setWaitlistBannerText(
+          `Hàng chờ vòng sau (${names.join(', ')}): Chào các bạn, các bạn vào bình luận sau nên sẽ tham gia vòng sau nhé!`
+        );
+        if (waitlistTimerRef.current) window.clearTimeout(waitlistTimerRef.current);
+        waitlistTimerRef.current = window.setTimeout(() => setWaitlistBannerText(''), 4500);
+
+        const now = Date.now();
+        const currentPhase = latestPhaseRef.current;
+        const currentTimeLeft = latestTimeLeftRef.current;
+        const isQuietMoment =
+          !isSpeakingRef.current &&
+          currentPhase !== 'WINNER' &&
+          !(currentPhase === 'QUESTION' && currentTimeLeft <= 5);
+
+        if (isQuietMoment && now - lastLateSpeechAtRef.current >= 15000) {
+          lastLateSpeechAtRef.current = now;
+          playLateCommenterSfx();
+          speakVietnamese(
+            'Chào các bạn, các bạn vào bình luận sau nên sẽ tham gia vòng sau nhé!',
+            'normal',
+            1.04
+          );
+        }
+      }, 900);
     });
 
     socket.on(
@@ -202,6 +655,11 @@ export default function App() {
     });
 
     return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      if (lateBatchTimerRef.current) window.clearTimeout(lateBatchTimerRef.current);
+      if (waitlistTimerRef.current) window.clearTimeout(waitlistTimerRef.current);
+      stopAllSpeech();
       simulationTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
       simulationTimersRef.current = [];
       socket.disconnect();
@@ -280,6 +738,170 @@ export default function App() {
     socketRef.current?.emit('reset_game');
   }
 
+  function handleToggleAutoMode() {
+    const nextAuto = !(gameState?.autoMode ?? false);
+    socketRef.current?.emit('set_auto_mode', {
+      enabled: nextAuto,
+      pickCount: randomCount,
+      transitionSeconds: gameState?.autoTransitionSeconds ?? 9,
+    });
+  }
+
+  function handleChangeAutoTransition(seconds: number) {
+    socketRef.current?.emit('set_auto_mode', {
+      transitionSeconds: seconds,
+    });
+  }
+
+  function handleToggleVoice() {
+    const nextVoice = !voiceEnabled;
+    if (!nextVoice) {
+      stopAllSpeechRef.current?.();
+    }
+    socketRef.current?.emit('set_audio_settings', { voiceEnabled: nextVoice });
+  }
+
+  function handleToggleSound() {
+    socketRef.current?.emit('set_audio_settings', { soundEnabled: !soundEnabled });
+  }
+
+  function handleTestVoice() {
+    if (!voiceEnabled) {
+      voiceEnabledRef.current = true;
+      socketRef.current?.emit('set_audio_settings', { voiceEnabled: true });
+    }
+    speakRef.current?.(
+      'Hệ thống Rung Chuông Vàng đã sẵn sàng. Giọng đọc đang hoạt động bình thường!',
+      'high',
+      1.0
+    );
+  }
+
+  function handleAddQuestion(e: FormEvent) {
+    e.preventDefault();
+    const question = newQuestion.trim();
+    const A = newOptA.trim();
+    const B = newOptB.trim();
+    const C = newOptC.trim();
+    const D = newOptD.trim();
+    if (!question || !A || !B || !C || !D) {
+      setQuestionFormMsg({
+        text: 'Vui lòng nhập đầy đủ câu hỏi và cả 4 đáp án A, B, C, D.',
+        isError: true,
+      });
+      return;
+    }
+
+    socketRef.current?.emit('add_question', {
+      topic: newTopic.trim() || 'Kiến thức chung',
+      question,
+      options: { A, B, C, D },
+      correctAnswer: newCorrect,
+    });
+    setNewQuestion('');
+    setNewOptA('');
+    setNewOptB('');
+    setNewOptC('');
+    setNewOptD('');
+    setQuestionFormMsg({ text: 'Đã thêm câu hỏi mới vào ngân hàng!', isError: false });
+  }
+
+  function handleDeleteQuestion(questionIndex: number) {
+    socketRef.current?.emit('delete_question', { questionIndex });
+  }
+
+  function handleResetDefaultQuestions() {
+    socketRef.current?.emit('reset_default_questions');
+  }
+
+  function handlePlayRandomQuestion() {
+    socketRef.current?.emit('start_random_question');
+  }
+
+  function handleToggleShuffleMode() {
+    socketRef.current?.emit('set_shuffle_mode', {
+      enabled: !(gameState?.shuffleMode ?? false),
+    });
+  }
+
+  function handleShuffleQuestions() {
+    socketRef.current?.emit('shuffle_questions');
+  }
+
+  async function handleImportQuestionsFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const content = await file.text();
+      setImportFileMsg({ text: `Đang đọc file "${file.name}"...`, isError: false });
+      socketRef.current?.emit('import_questions', {
+        fileName: file.name,
+        content,
+        mode: importMode,
+      });
+    } catch {
+      setImportFileMsg({ text: 'Không thể đọc nội dung file đã chọn.', isError: true });
+    }
+  }
+
+  function handleDownloadSampleTemplate() {
+    const templateText = [
+      'Chủ đề: Địa lý Việt Nam',
+      'Câu 1: Thành phố nào được mệnh danh là "Thành phố ngàn hoa"?',
+      'A. Sa Pa',
+      'B. Đà Lạt',
+      'C. Hội An',
+      'D. Huế',
+      'Đáp án: B',
+      '',
+      'Chủ đề: Đố vui dân gian',
+      'Câu 2: Con vật nào xuất hiện đầu tiên trong 12 con giáp của Việt Nam?',
+      'A. Chuột (Tý)',
+      'B. Trâu (Sửu)',
+      'C. Mèo (Mão)',
+      'D. Rồng (Thìn)',
+      'Đáp án: A',
+      '',
+      'Chủ đề: Khoa học',
+      'Câu 3: Hành tinh nào gần Mặt Trời nhất trong Hệ Mặt Trời?',
+      'A. Sao Kim',
+      'B. Trái Đất',
+      'C. Sao Thủy',
+      'D. Sao Hỏa',
+      'Đáp án: C',
+    ].join('\n');
+    const blob = new Blob([templateText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mau_bo_cau_hoi_rung_chuong_vang.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleExportQuestionsJson() {
+    const list = (gameState?.questionsMeta ?? []).map((q, idx) => ({
+      id: q.id || idx + 1,
+      topic: q.topic,
+      question: q.question,
+      options: q.options || { A: '', B: '', C: '', D: '' },
+      correctAnswer: q.correctAnswer || 'A',
+    }));
+    const blob = new Blob([JSON.stringify(list, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bo_cau_hoi_rung_chuong_vang.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   function handleSimulate15Answers() {
     if (isSimulating || !socketRef.current) return;
     setIsSimulating(true);
@@ -333,6 +955,202 @@ export default function App() {
   const progressRatio = phase === 'QUESTION' ? timeLeft / duration : isEnded ? 0 : 1;
   const remainingCount = gameState?.stats.remaining ?? 0;
   const totalCount = gameState?.stats.total ?? 0;
+
+  useEffect(() => {
+    if (phase !== 'WINNER') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const canvas = fireworksCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const FIREWORK_COLORS = ['#FFE18C', '#F5C451', '#34D399', '#FB7185', '#60A5FA', '#FBBF24', '#FFFFFF'];
+
+    interface FireworkParticle {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      alpha: number;
+      decay: number;
+      radius: number;
+      color: string;
+    }
+
+    interface FireworkRocket {
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      targetY: number;
+      color: string;
+    }
+
+    const particles: FireworkParticle[] = [];
+    const rockets: FireworkRocket[] = [];
+    let animationId: number | null = null;
+    let spawnTimer: number | null = null;
+    const introTimers: number[] = [];
+    let active = true;
+
+    function syncCanvasSize() {
+      if (!canvas) return;
+      const parent = canvas.parentElement;
+      const width = parent ? parent.clientWidth : canvas.clientWidth;
+      const height = parent ? parent.clientHeight : canvas.clientHeight;
+      if (width > 0 && height > 0) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+    }
+
+    syncCanvasSize();
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' && canvas.parentElement
+        ? new ResizeObserver(() => syncCanvasSize())
+        : null;
+    if (resizeObserver && canvas.parentElement) {
+      resizeObserver.observe(canvas.parentElement);
+    }
+
+    function playFireworkPop() {
+      if (!soundEnabledRef.current) return;
+      const audioCtx = audioCtxRef.current;
+      if (!audioCtx || audioCtx.state !== 'running') return;
+
+      const baseFreq = 180 + Math.random() * 140;
+      const playShortTone = (freq: number, offset: number, dur: number, type: OscillatorType, vol: number) => {
+        const now = audioCtx.currentTime + offset;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(vol, now + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+      };
+
+      playShortTone(baseFreq, 0, 0.14, 'triangle', 0.055);
+      playShortTone(baseFreq * 2.2, 0.03, 0.1, 'sine', 0.04);
+    }
+
+    function createExplosion(x: number, y: number) {
+      const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+      const secondaryColor = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+      const count = 42 + Math.floor(Math.random() * 22);
+      for (let i = 0; i < count; i++) {
+        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.15;
+        const speed = 2.2 + Math.random() * 5.2;
+        particles.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          alpha: 1,
+          decay: 0.014 + Math.random() * 0.012,
+          radius: 1.8 + Math.random() * 2.5,
+          color: i % 3 === 0 ? secondaryColor : color,
+        });
+      }
+      playFireworkPop();
+    }
+
+    function launchRocket() {
+      if (!canvas) return;
+      const w = canvas.width || 640;
+      const h = canvas.height || 640;
+      rockets.push({
+        x: w * 0.14 + Math.random() * (w * 0.72),
+        y: h - 14,
+        vx: (Math.random() - 0.5) * 1.8,
+        vy: -(11 + Math.random() * 5),
+        targetY: h * 0.16 + Math.random() * (h * 0.44),
+        color: FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)],
+      });
+    }
+
+    function renderFrame() {
+      if (!active || !canvas || !ctx) return;
+      const w = canvas.width;
+      const h = canvas.height;
+
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'lighter';
+
+      for (let i = rockets.length - 1; i >= 0; i--) {
+        const r = rockets[i];
+        r.x += r.vx;
+        r.y += r.vy;
+        r.vy += 0.16;
+
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, 2.8, 0, Math.PI * 2);
+        ctx.fillStyle = r.color;
+        ctx.fill();
+
+        if (r.y <= r.targetY || r.vy >= -1.5) {
+          createExplosion(r.x, r.y);
+          rockets.splice(i, 1);
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.vx *= 0.975;
+        p.vy = p.vy * 0.975 + 0.1;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.restore();
+      }
+
+      animationId = window.requestAnimationFrame(renderFrame);
+    }
+
+    const w = canvas.width || 640;
+    const h = canvas.height || 640;
+    createExplosion(w * 0.26, h * 0.55);
+    introTimers.push(window.setTimeout(() => active && createExplosion(w * 0.74, h * 0.55), 180));
+    introTimers.push(window.setTimeout(() => active && createExplosion(w * 0.5, h * 0.26), 340));
+
+    spawnTimer = window.setInterval(() => {
+      if (!active) return;
+      launchRocket();
+      if (Math.random() > 0.45) {
+        launchRocket();
+      }
+    }, 620);
+
+    animationId = window.requestAnimationFrame(renderFrame);
+
+    return () => {
+      active = false;
+      if (animationId !== null) window.cancelAnimationFrame(animationId);
+      if (spawnTimer !== null) window.clearInterval(spawnTimer);
+      introTimers.forEach((id) => window.clearTimeout(id));
+      resizeObserver?.disconnect();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [phase]);
 
   return (
     <div className="min-h-screen bg-[#0b1120] text-slate-100">
@@ -466,8 +1284,11 @@ export default function App() {
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5">
-              {[0, 1, 2].map((idx) => (
+            <div className="grid max-h-44 grid-cols-3 gap-2.5 overflow-y-auto pr-1">
+              {(gameState?.questionsMeta && gameState.questionsMeta.length > 0
+                ? gameState.questionsMeta.map((q) => q.index)
+                : [0, 1, 2]
+              ).map((idx) => (
                 <button
                   key={idx}
                   type="button"
@@ -481,6 +1302,70 @@ export default function App() {
                   Phát Câu {idx + 1}
                 </button>
               ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-slate-800 pt-3">
+              <span className="text-xs text-slate-400">Tự động trộn thứ tự câu hỏi mỗi khi bắt đầu ván mới</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handlePlayRandomQuestion}
+                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                >
+                  <Shuffle className="h-3.5 w-3.5" />
+                  Phát ngẫu nhiên 1 câu
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleShuffleMode}
+                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                    gameState?.shuffleMode !== false
+                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                      : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {gameState?.shuffleMode !== false ? 'Mix ván mới: Bật' : 'Mix ván mới: Tắt'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+              <span
+                className={`text-xs font-semibold ${
+                  gameState?.autoMode ? 'text-emerald-400' : 'text-slate-400'
+                }`}
+              >
+                {gameState?.autoMode
+                  ? gameState.autoStatus || 'Vận hành tự động: Đang bật'
+                  : 'Vận hành tự động: Đang tắt (điều khiển thủ công)'}
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>Nghỉ chuyển câu:</span>
+                  <select
+                    value={gameState?.autoTransitionSeconds ?? 9}
+                    onChange={(e) => handleChangeAutoTransition(Number(e.target.value) || 9)}
+                    aria-label="Thời gian nghỉ chuyển câu tiếp theo"
+                    className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value={6}>6s (Nhanh)</option>
+                    <option value={9}>9s (Khuyên dùng)</option>
+                    <option value={12}>12s (Thoải mái)</option>
+                    <option value={15}>15s (Chậm)</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleToggleAutoMode}
+                  className={`min-h-[38px] whitespace-nowrap shrink-0 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                    gameState?.autoMode
+                      ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                      : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  {gameState?.autoMode ? 'Tắt Tự động' : 'Bật Tự động vận hành'}
+                </button>
+              </div>
             </div>
 
             {phase === 'REVEAL' && remainingCount > 1 ? (
@@ -506,6 +1391,42 @@ export default function App() {
                 </div>
               </div>
             ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-3">
+              <span className="text-xs text-slate-400">Giọng đọc MC &amp; âm thanh (ẩn khỏi màn hình Live)</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleToggleVoice}
+                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                    voiceEnabled
+                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                      : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                  {voiceEnabled ? 'Giọng đọc: Bật' : 'Giọng đọc: Tắt'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleSound}
+                  className={`inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${
+                    soundEnabled
+                      ? 'border-amber-500 bg-amber-500/15 text-amber-300'
+                      : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {soundEnabled ? 'Âm thanh: Bật' : 'Âm thanh: Tắt'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestVoice}
+                  className="inline-flex min-h-[36px] items-center whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                >
+                  Thử giọng đọc
+                </button>
+              </div>
+            </div>
 
             <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-3">
               <span className="text-xs text-slate-400">Xóa thí sinh trên sàn để bắt đầu ván mới</span>
@@ -581,10 +1502,232 @@ export default function App() {
               )}
             </div>
           </article>
+
+          {/* Thẻ 5: Ngân hàng câu hỏi */}
+          <article className="rounded-xl border border-slate-800 bg-[#111827] p-5 flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-50">
+                  5. Ngân hàng câu hỏi ({gameState?.questionsMeta?.length ?? 0} câu)
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  Thêm từng câu hoặc nhập cả bộ từ file (.JSON, .CSV, .TXT) và trộn ngẫu nhiên thứ tự.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetDefaultQuestions}
+                className="shrink-0 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+              >
+                Mặc định (3 câu)
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-lg border border-slate-800 bg-[#070b14] p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={importMode}
+                  onChange={(e) => setImportMode(e.target.value === 'replace' ? 'replace' : 'append')}
+                  aria-label="Chế độ nhập file câu hỏi"
+                  className="min-h-[36px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-xs font-semibold text-slate-100 focus:border-amber-500 focus:outline-none"
+                >
+                  <option value="append">Thêm vào bộ hiện có</option>
+                  <option value="replace">Thay thế toàn bộ</option>
+                </select>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".json,.csv,.txt,.tsv"
+                  onChange={handleImportQuestionsFile}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (importFileInputRef.current) {
+                      importFileInputRef.current.value = '';
+                      importFileInputRef.current.click();
+                    }
+                  }}
+                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Nhập file (.JSON / .CSV / .TXT)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleShuffleQuestions}
+                  className="inline-flex min-h-[36px] items-center gap-1.5 whitespace-nowrap shrink-0 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  <Shuffle className="h-3.5 w-3.5" />
+                  Trộn thứ tự bộ câu
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleTemplate}
+                  className="inline-flex min-h-[34px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                >
+                  <Download className="h-3 w-3" />
+                  Tải mẫu (.TXT)
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportQuestionsJson}
+                  className="inline-flex min-h-[34px] items-center gap-1 whitespace-nowrap rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:bg-slate-700 cursor-pointer"
+                >
+                  <Download className="h-3 w-3" />
+                  Xuất JSON
+                </button>
+              </div>
+              <div className="w-full text-[11px] text-slate-400">
+                Mẫu TXT: <code className="text-slate-300">Câu 1: ...</code> · <code className="text-slate-300">A. ... B. ... C. ... D. ...</code> · <code className="text-slate-300">Đáp án: B</code> (hoặc CSV 7 cột: Chủ đề, Câu hỏi, A, B, C, D, Đáp án đúng).
+              </div>
+              {importFileMsg ? (
+                <div
+                  className={`w-full text-xs font-semibold ${
+                    importFileMsg.isError ? 'text-red-400' : 'text-emerald-400'
+                  }`}
+                >
+                  {importFileMsg.text}
+                </div>
+              ) : null}
+            </div>
+
+            <form onSubmit={handleAddQuestion} className="flex flex-col gap-2.5">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <input
+                  type="text"
+                  value={newTopic}
+                  onChange={(e) => setNewTopic(e.target.value)}
+                  placeholder="Chủ đề (vd: Đố vui)"
+                  className="min-h-[40px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  placeholder="Nhập nội dung câu hỏi..."
+                  className="min-h-[40px] sm:col-span-2 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newOptA}
+                  onChange={(e) => setNewOptA(e.target.value)}
+                  placeholder="Đáp án A"
+                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newOptB}
+                  onChange={(e) => setNewOptB(e.target.value)}
+                  placeholder="Đáp án B"
+                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newOptC}
+                  onChange={(e) => setNewOptC(e.target.value)}
+                  placeholder="Đáp án C"
+                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={newOptD}
+                  onChange={(e) => setNewOptD(e.target.value)}
+                  placeholder="Đáp án D"
+                  className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2">
+                  <label htmlFor="reactCorrectSelect" className="text-xs font-semibold text-slate-300">
+                    Đáp án đúng:
+                  </label>
+                  <select
+                    id="reactCorrectSelect"
+                    value={newCorrect}
+                    onChange={(e) => setNewCorrect(e.target.value as AnswerChoice)}
+                    className="min-h-[38px] rounded-lg border border-slate-700 bg-slate-900 px-2.5 text-sm font-bold text-amber-300 focus:border-amber-500 focus:outline-none"
+                  >
+                    {OPTION_KEYS.map((k) => (
+                      <option key={k} value={k}>
+                        Đáp án {k}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  className="min-h-[38px] whitespace-nowrap shrink-0 rounded-lg bg-amber-500 px-4 py-1.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-colors cursor-pointer"
+                >
+                  + Thêm câu hỏi
+                </button>
+              </div>
+
+              {questionFormMsg ? (
+                <div
+                  className={`text-xs font-semibold ${
+                    questionFormMsg.isError ? 'text-red-400' : 'text-emerald-400'
+                  }`}
+                >
+                  {questionFormMsg.text}
+                </div>
+              ) : null}
+            </form>
+
+            <div className="flex max-h-60 flex-col gap-2 overflow-y-auto border-t border-slate-800 pt-3">
+              {(gameState?.questionsMeta ?? []).map((q) => (
+                <div
+                  key={q.id}
+                  className="flex items-center justify-between gap-2.5 rounded-lg border border-slate-800 bg-[#070b14] px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-bold text-slate-100" title={q.question}>
+                      Câu {q.index + 1} ({q.topic}): {q.question}
+                    </div>
+                    <div className="truncate text-[11px] text-slate-400">
+                      Đáp án đúng: <strong className="text-emerald-400">{q.correctAnswer ?? '—'}</strong>
+                      {q.options ? ` · ${q.options[q.correctAnswer ?? 'A']}` : ''}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleStartQuestion(q.index)}
+                      className="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-[11px] font-bold text-slate-200 hover:bg-slate-700 cursor-pointer"
+                    >
+                      Phát
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteQuestion(q.index)}
+                      className="rounded-md bg-red-600/85 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-500 cursor-pointer"
+                    >
+                      Xóa
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
         </section>
 
         {/* Cột phải: Màn hình Rung Chuông Vàng thời gian thực (kiểu lớp học) */}
-        <section className="flex flex-col gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#06112d] via-[#0a1c47] to-[#050d24] p-6 lg:col-span-7">
+        <section className="relative overflow-hidden flex flex-col gap-4 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-[#06112d] via-[#0a1c47] to-[#050d24] p-6 lg:col-span-7">
+          {phase === 'WINNER' ? (
+            <canvas
+              ref={fireworksCanvasRef}
+              className="pointer-events-none absolute inset-0 z-20 h-full w-full"
+              aria-hidden="true"
+            />
+          ) : null}
           {/* Header */}
           <div className="flex items-center justify-between gap-4 border-b border-amber-400/20 pb-4">
             <div className="flex items-center gap-3">
@@ -615,7 +1758,7 @@ export default function App() {
               <div>
                 <div className="text-xs font-bold uppercase tracking-wider text-amber-400">
                   {gameState?.currentQuestion
-                    ? `Câu hỏi 0${gameState.currentQuestion.index + 1} / 0${gameState.currentQuestion.total} · ${gameState.currentQuestion.topic}`
+                    ? `Câu hỏi ${String(gameState.currentQuestion.index + 1).padStart(2, '0')} / ${String(gameState.currentQuestion.total).padStart(2, '0')} · ${gameState.currentQuestion.topic}`
                     : 'Phòng thi trực tuyến · Chờ phát câu hỏi'}
                 </div>
                 <p className="mt-2 text-lg font-bold leading-snug text-white">
@@ -695,6 +1838,15 @@ export default function App() {
                 Chỗ ngồi: {remainingCount} còn thi / {totalCount} bàn
               </span>
             </div>
+
+            {waitlistBannerText ? (
+              <div
+                aria-live="polite"
+                className="rounded-lg border border-amber-400/45 bg-amber-400/15 px-3.5 py-2 text-xs font-bold text-amber-100"
+              >
+                {waitlistBannerText}
+              </div>
+            ) : null}
 
             {phase === 'WINNER' && gameState?.winner ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-amber-400/60 bg-gradient-to-b from-[#102860] to-[#07112e] p-8 text-center">

@@ -316,6 +316,9 @@
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
+        max-height: 176px;
+        overflow-y: auto;
+        padding-right: 4px;
       }
 
       @media (max-width: 560px) {
@@ -328,6 +331,8 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+        max-height: 150px;
+        overflow-y: auto;
         padding-top: 6px;
         border-top: 1px solid var(--border-hairline);
       }
@@ -353,9 +358,81 @@
         border-top: 1px solid var(--border-hairline);
       }
 
-      /* System Log Feed */
-      .log-card {
+      /* System Log Feed & Question Bank */
+      .log-card,
+      .bank-card {
         grid-column: 1 / -1;
+      }
+
+      .bank-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .bank-options-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      @media (max-width: 640px) {
+        .bank-options-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .bank-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-height: 320px;
+        overflow-y: auto;
+        padding-top: 6px;
+        border-top: 1px solid var(--border-hairline);
+      }
+
+      .bank-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border-hairline);
+        background: var(--bg-input);
+      }
+
+      .bank-item-info {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .bank-item-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink-primary);
+      }
+
+      .bank-item-sub {
+        font-size: 12px;
+        color: var(--ink-muted);
+      }
+
+      .bank-item-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+
+      .btn-sm {
+        min-height: 34px;
+        padding: 6px 12px;
+        font-size: 12px;
       }
 
       .log-box {
@@ -492,10 +569,47 @@
             </p>
           </div>
 
-          <div class="question-buttons-grid">
-            <button id="btnQ1" type="button" class="btn btn-secondary" data-q-index="0">Phát Câu 1</button>
-            <button id="btnQ2" type="button" class="btn btn-secondary" data-q-index="1">Phát Câu 2</button>
-            <button id="btnQ3" type="button" class="btn btn-secondary" data-q-index="2">Phát Câu 3</button>
+          <div id="questionButtonsGrid" class="question-buttons-grid">
+            <button type="button" class="btn btn-secondary" data-q-index="0">Phát Câu 1</button>
+            <button type="button" class="btn btn-secondary" data-q-index="1">Phát Câu 2</button>
+            <button type="button" class="btn btn-secondary" data-q-index="2">Phát Câu 3</button>
+          </div>
+
+          <div class="divider-row" style="flex-wrap: wrap;">
+            <span class="card-desc">Tự động trộn thứ tự câu hỏi mỗi khi bắt đầu ván mới</span>
+            <div class="field-row">
+              <button id="playRandomQuestionBtn" type="button" class="btn btn-gold btn-sm">
+                Phát ngẫu nhiên 1 câu
+              </button>
+              <button id="toggleShuffleModeBtn" type="button" class="btn btn-secondary btn-sm is-active">
+                Mix ván mới: Bật
+              </button>
+            </div>
+          </div>
+
+          <div class="divider-row" style="flex-wrap: wrap;">
+            <span id="autoStatusLine" class="status-line">
+              Vận hành tự động: Đang tắt (điều khiển thủ công)
+            </span>
+            <div class="field-row" style="align-items: center;">
+              <label for="autoTransitionSelect" class="card-desc" style="color: var(--ink-secondary); font-weight: 600;">
+                Nghỉ chuyển câu:
+              </label>
+              <select
+                id="autoTransitionSelect"
+                class="text-input"
+                style="min-width: 120px; max-width: 145px; flex: 0;"
+                aria-label="Thời gian nghỉ chuyển câu tiếp theo"
+              >
+                <option value="6">6 giây (Nhanh)</option>
+                <option value="9" selected>9 giây (Khuyên dùng)</option>
+                <option value="12">12 giây (Thoải mái)</option>
+                <option value="15">15 giây (Chậm)</option>
+              </select>
+              <button id="toggleAutoModeBtn" type="button" class="btn btn-secondary">
+                Bật Tự động vận hành
+              </button>
+            </div>
           </div>
 
           <div id="winnerBannerLine" class="status-line connected" hidden></div>
@@ -509,6 +623,21 @@
           </div>
 
           <div id="questionPreviewList" class="question-preview-list"></div>
+
+          <div class="divider-row" style="flex-wrap: wrap;">
+            <span class="card-desc">Điều khiển giọng đọc MC &amp; hiệu ứng âm thanh (ẩn khỏi màn hình Live)</span>
+            <div class="field-row">
+              <button id="toggleVoiceBtn" type="button" class="btn btn-secondary is-active">
+                Giọng đọc: Bật
+              </button>
+              <button id="toggleSoundBtn" type="button" class="btn btn-secondary is-active">
+                Âm thanh: Bật
+              </button>
+              <button id="testVoiceBtn" type="button" class="btn btn-gold">
+                Thử giọng đọc
+              </button>
+            </div>
+          </div>
 
           <div class="divider-row">
             <span class="card-desc">Xóa toàn bộ người chơi trên sàn và đưa về trạng thái ban đầu</span>
@@ -545,6 +674,101 @@
           </div>
           <div id="systemLogBox" class="log-box" role="log" aria-live="polite"></div>
         </article>
+
+        <!-- Thẻ 5: Ngân hàng câu hỏi -->
+        <article class="card bank-card">
+          <div class="card-header">
+            <h2 id="questionBankTitle" class="card-title">5. Ngân hàng câu hỏi</h2>
+            <p class="card-desc">
+              Thêm từng câu hoặc tải lên cả bộ câu hỏi từ file (.JSON, .CSV, .TXT) và trộn ngẫu nhiên thứ tự câu hỏi.
+            </p>
+          </div>
+
+          <div class="divider-row" style="flex-wrap: wrap; padding-top: 0; border-top: none;">
+            <div class="field-row" style="align-items: center;">
+              <select
+                id="importModeSelect"
+                class="text-input"
+                style="min-width: 150px; max-width: 190px; flex: 0;"
+                aria-label="Chế độ nhập file câu hỏi"
+              >
+                <option value="append">Thêm vào bộ hiện có</option>
+                <option value="replace">Thay thế toàn bộ</option>
+              </select>
+              <input
+                id="importQuestionsFileInput"
+                type="file"
+                accept=".json,.csv,.txt,.tsv"
+                hidden
+              />
+              <button id="importQuestionsBtn" type="button" class="btn btn-gold">
+                Nhập từ file (.JSON / .CSV / .TXT)
+              </button>
+              <button id="shuffleQuestionsBtn" type="button" class="btn btn-secondary">
+                Trộn ngẫu nhiên thứ tự
+              </button>
+            </div>
+            <div class="field-row">
+              <button id="downloadTemplateBtn" type="button" class="btn btn-secondary btn-sm">
+                Tải file mẫu (.TXT)
+              </button>
+              <button id="exportQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
+                Xuất JSON
+              </button>
+            </div>
+          </div>
+          <div class="card-desc" style="font-size: 12px;">
+            Định dạng TXT: <code>Câu 1: ...</code> / <code>A. ...</code> / <code>B. ...</code> / <code>C. ...</code> / <code>D. ...</code> / <code>Đáp án: B</code> (hoặc CSV 7 cột: <code>Chủ đề, Câu hỏi, A, B, C, D, Đáp án đúng</code>).
+          </div>
+          <div id="importFileStatus" class="status-line" hidden></div>
+
+          <form id="addQuestionForm" class="bank-form">
+            <div class="field-row">
+              <input
+                id="qTopicInput"
+                class="text-input"
+                type="text"
+                placeholder="Chủ đề (vd: Lịch sử, Đố vui, Âm nhạc)"
+                style="max-width: 280px;"
+              />
+              <input
+                id="qTextInput"
+                class="text-input"
+                type="text"
+                placeholder="Nhập nội dung câu hỏi..."
+                required
+              />
+            </div>
+
+            <div class="bank-options-grid">
+              <input id="qOptAInput" class="text-input" type="text" placeholder="Đáp án A" required />
+              <input id="qOptBInput" class="text-input" type="text" placeholder="Đáp án B" required />
+              <input id="qOptCInput" class="text-input" type="text" placeholder="Đáp án C" required />
+              <input id="qOptDInput" class="text-input" type="text" placeholder="Đáp án D" required />
+            </div>
+
+            <div class="field-row" style="align-items: center; justify-content: space-between;">
+              <div class="field-row" style="align-items: center;">
+                <label for="qCorrectSelect" class="card-desc" style="color: var(--ink-secondary); font-weight: 600;">
+                  Đáp án đúng:
+                </label>
+                <select id="qCorrectSelect" class="text-input" style="min-width: 110px; max-width: 130px; flex: 0;">
+                  <option value="A">Đáp án A</option>
+                  <option value="B">Đáp án B</option>
+                  <option value="C">Đáp án C</option>
+                  <option value="D">Đáp án D</option>
+                </select>
+                <button type="submit" class="btn btn-gold">+ Thêm câu hỏi</button>
+              </div>
+              <button id="resetDefaultQuestionsBtn" type="button" class="btn btn-secondary btn-sm">
+                Khôi phục 3 câu mặc định
+              </button>
+            </div>
+            <div id="questionFormStatus" class="status-line" hidden></div>
+          </form>
+
+          <div id="questionBankList" class="bank-list"></div>
+        </article>
       </section>
     </main>
 
@@ -563,16 +787,39 @@
       const toggleRosterLockBtn = document.getElementById('toggleRosterLockBtn');
       const rosterStatusLine = document.getElementById('rosterStatusLine');
 
-      const questionButtons = [
-        document.getElementById('btnQ1'),
-        document.getElementById('btnQ2'),
-        document.getElementById('btnQ3'),
-      ];
+      const questionButtonsGrid = document.getElementById('questionButtonsGrid');
       const winnerBannerLine = document.getElementById('winnerBannerLine');
       const tiebreakControls = document.getElementById('tiebreakControls');
       const tiebreakFastestBtn = document.getElementById('tiebreakFastestBtn');
       const tiebreakRandomBtn = document.getElementById('tiebreakRandomBtn');
       const questionPreviewList = document.getElementById('questionPreviewList');
+      const addQuestionForm = document.getElementById('addQuestionForm');
+      const qTopicInput = document.getElementById('qTopicInput');
+      const qTextInput = document.getElementById('qTextInput');
+      const qOptAInput = document.getElementById('qOptAInput');
+      const qOptBInput = document.getElementById('qOptBInput');
+      const qOptCInput = document.getElementById('qOptCInput');
+      const qOptDInput = document.getElementById('qOptDInput');
+      const qCorrectSelect = document.getElementById('qCorrectSelect');
+      const questionFormStatus = document.getElementById('questionFormStatus');
+      const questionBankTitle = document.getElementById('questionBankTitle');
+      const importModeSelect = document.getElementById('importModeSelect');
+      const importQuestionsFileInput = document.getElementById('importQuestionsFileInput');
+      const importQuestionsBtn = document.getElementById('importQuestionsBtn');
+      const shuffleQuestionsBtn = document.getElementById('shuffleQuestionsBtn');
+      const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+      const exportQuestionsBtn = document.getElementById('exportQuestionsBtn');
+      const importFileStatus = document.getElementById('importFileStatus');
+      const resetDefaultQuestionsBtn = document.getElementById('resetDefaultQuestionsBtn');
+      const questionBankList = document.getElementById('questionBankList');
+      const playRandomQuestionBtn = document.getElementById('playRandomQuestionBtn');
+      const toggleShuffleModeBtn = document.getElementById('toggleShuffleModeBtn');
+      const autoStatusLine = document.getElementById('autoStatusLine');
+      const autoTransitionSelect = document.getElementById('autoTransitionSelect');
+      const toggleAutoModeBtn = document.getElementById('toggleAutoModeBtn');
+      const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
+      const toggleSoundBtn = document.getElementById('toggleSoundBtn');
+      const testVoiceBtn = document.getElementById('testVoiceBtn');
       const resetGameBtn = document.getElementById('resetGameBtn');
       const simulateChatBtn = document.getElementById('simulateChatBtn');
       const simulatePoolBtn = document.getElementById('simulatePoolBtn');
@@ -585,6 +832,10 @@
 
       let isSimulating = false;
       let latestState = null;
+      let autoMode = false;
+      let shuffleMode = true;
+      let voiceEnabled = true;
+      let soundEnabled = true;
 
       const MOCK_PLAYERS = [
         { uniqueId: 'minhanh_99', nickname: 'Minh Anh' },
@@ -706,18 +957,67 @@
           disconnectBtn.hidden = true;
         }
 
-        // Cập nhật nút câu hỏi
-        questionButtons.forEach((btn, idx) => {
-          btn.classList.toggle('is-active', state.currentQuestionIndex === idx);
-        });
+        // Cập nhật chế độ tự động & mix câu hỏi
+        if (typeof state.autoMode === 'boolean') {
+          autoMode = state.autoMode;
+        }
+        if (typeof state.shuffleMode === 'boolean') {
+          shuffleMode = state.shuffleMode;
+        }
+        toggleShuffleModeBtn.textContent = shuffleMode ? 'Mix ván mới: Bật' : 'Mix ván mới: Tắt';
+        toggleShuffleModeBtn.classList.toggle('is-active', shuffleMode);
+        if (typeof state.autoTransitionSeconds === 'number') {
+          autoTransitionSelect.value = String(state.autoTransitionSeconds);
+        }
+        renderAutoModeUi(autoMode, state.autoStatus || '');
 
-        // Danh sách tóm tắt câu hỏi
+        // Cập nhật cài đặt giọng đọc & âm thanh
+        if (typeof state.voiceEnabled === 'boolean') {
+          if (voiceEnabled && !state.voiceEnabled) {
+            stopAllSpeech();
+          }
+          voiceEnabled = state.voiceEnabled;
+        }
+        if (typeof state.soundEnabled === 'boolean') {
+          soundEnabled = state.soundEnabled;
+        }
+        updateAudioControlButtons();
+
+        // Cập nhật danh sách nút câu hỏi & ngân hàng câu hỏi
         if (Array.isArray(state.questionsMeta)) {
+          questionBankTitle.textContent = `5. Ngân hàng câu hỏi (${state.questionsMeta.length} câu)`;
+          questionButtonsGrid.innerHTML = state.questionsMeta
+            .map(
+              (q) =>
+                `<button type="button" class="btn btn-secondary ${state.currentQuestionIndex === q.index ? 'is-active' : ''}" data-q-index="${q.index}">Phát Câu ${q.index + 1}</button>`
+            )
+            .join('');
+
           questionPreviewList.innerHTML = state.questionsMeta
             .map(
               (q) =>
                 `<div class="question-preview-item" title="${escapeHtml(q.question)}"><strong>Câu ${q.index + 1} (${escapeHtml(q.topic)}):</strong> ${escapeHtml(q.question)}</div>`
             )
+            .join('');
+
+          questionBankList.innerHTML = state.questionsMeta
+            .map((q) => {
+              const optsSummary = q.options
+                ? `A: ${escapeHtml(q.options.A)} · B: ${escapeHtml(q.options.B)} · C: ${escapeHtml(q.options.C)} · D: ${escapeHtml(q.options.D)}`
+                : '';
+              return `
+                <div class="bank-item">
+                  <div class="bank-item-info">
+                    <div class="bank-item-title">Câu ${q.index + 1} (${escapeHtml(q.topic)}): ${escapeHtml(q.question)}</div>
+                    <div class="bank-item-sub">${optsSummary} · <strong style="color:#34d399;">Đáp án đúng: ${escapeHtml(q.correctAnswer || '')}</strong></div>
+                  </div>
+                  <div class="bank-item-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" data-play-q="${q.index}">Phát</button>
+                    <button type="button" class="btn btn-danger btn-sm" data-del-q="${q.index}">Xóa</button>
+                  </div>
+                </div>
+              `;
+            })
             .join('');
         }
       }
@@ -747,12 +1047,164 @@
         socket.emit('clear_commenters');
       });
 
-      // 2. Phát Câu 1, 2, 3, Chốt quán quân & Reset
-      questionButtons.forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const idx = Number(btn.dataset.qIndex);
-          socket.emit('start_question', { questionIndex: idx });
+      // 2. Phát Câu 1..N, Chốt quán quân & Reset
+      questionButtonsGrid.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-q-index]');
+        if (!btn) return;
+        const idx = Number(btn.dataset.qIndex);
+        socket.emit('start_question', { questionIndex: idx });
+      });
+
+      // 5. Quản lý ngân hàng câu hỏi
+      addQuestionForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const topic = qTopicInput.value.trim() || 'Kiến thức chung';
+        const question = qTextInput.value.trim();
+        const A = qOptAInput.value.trim();
+        const B = qOptBInput.value.trim();
+        const C = qOptCInput.value.trim();
+        const D = qOptDInput.value.trim();
+        const correctAnswer = qCorrectSelect.value;
+
+        if (!question || !A || !B || !C || !D) {
+          questionFormStatus.hidden = false;
+          questionFormStatus.className = 'status-line error';
+          questionFormStatus.textContent = 'Vui lòng nhập đầy đủ câu hỏi và cả 4 đáp án A, B, C, D.';
+          return;
+        }
+
+        socket.emit('add_question', {
+          topic,
+          question,
+          options: { A, B, C, D },
+          correctAnswer,
         });
+
+        qTextInput.value = '';
+        qOptAInput.value = '';
+        qOptBInput.value = '';
+        qOptCInput.value = '';
+        qOptDInput.value = '';
+        questionFormStatus.hidden = false;
+        questionFormStatus.className = 'status-line connected';
+        questionFormStatus.textContent = 'Đã thêm câu hỏi mới vào ngân hàng!';
+      });
+
+      questionBankList.addEventListener('click', (e) => {
+        const playBtn = e.target.closest('button[data-play-q]');
+        if (playBtn) {
+          socket.emit('start_question', { questionIndex: Number(playBtn.dataset.playQ) });
+          return;
+        }
+        const delBtn = e.target.closest('button[data-del-q]');
+        if (delBtn) {
+          socket.emit('delete_question', { questionIndex: Number(delBtn.dataset.delQ) });
+        }
+      });
+
+      resetDefaultQuestionsBtn.addEventListener('click', () => {
+        socket.emit('reset_default_questions');
+      });
+
+      playRandomQuestionBtn.addEventListener('click', () => {
+        socket.emit('start_random_question');
+      });
+
+      toggleShuffleModeBtn.addEventListener('click', () => {
+        socket.emit('set_shuffle_mode', { enabled: !shuffleMode });
+      });
+
+      shuffleQuestionsBtn.addEventListener('click', () => {
+        socket.emit('shuffle_questions');
+      });
+
+      importQuestionsBtn.addEventListener('click', () => {
+        importQuestionsFileInput.value = '';
+        importQuestionsFileInput.click();
+      });
+
+      importQuestionsFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const content = await file.text();
+          importFileStatus.hidden = false;
+          importFileStatus.className = 'status-line connecting';
+          importFileStatus.textContent = `Đang đọc file "${file.name}"...`;
+          socket.emit('import_questions', {
+            fileName: file.name,
+            content,
+            mode: importModeSelect.value === 'replace' ? 'replace' : 'append',
+          });
+        } catch {
+          importFileStatus.hidden = false;
+          importFileStatus.className = 'status-line error';
+          importFileStatus.textContent = 'Không thể đọc nội dung file đã chọn.';
+        }
+      });
+
+      downloadTemplateBtn.addEventListener('click', () => {
+        const templateText = [
+          'Chủ đề: Địa lý Việt Nam',
+          'Câu 1: Thành phố nào được mệnh danh là "Thành phố ngàn hoa"?',
+          'A. Sa Pa',
+          'B. Đà Lạt',
+          'C. Hội An',
+          'D. Huế',
+          'Đáp án: B',
+          '',
+          'Chủ đề: Đố vui dân gian',
+          'Câu 2: Con vật nào xuất hiện đầu tiên trong 12 con giáp của Việt Nam?',
+          'A. Chuột (Tý)',
+          'B. Trâu (Sửu)',
+          'C. Mèo (Mão)',
+          'D. Rồng (Thìn)',
+          'Đáp án: A',
+          '',
+          'Chủ đề: Khoa học',
+          'Câu 3: Hành tinh nào gần Mặt Trời nhất trong Hệ Mặt Trời?',
+          'A. Sao Kim',
+          'B. Trái Đất',
+          'C. Sao Thủy',
+          'D. Sao Hỏa',
+          'Đáp án: C',
+        ].join('\n');
+        const blob = new Blob([templateText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mau_bo_cau_hoi_rung_chuong_vang.txt';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      exportQuestionsBtn.addEventListener('click', () => {
+        const list = (latestState?.questionsMeta || []).map((q, idx) => ({
+          id: q.id || idx + 1,
+          topic: q.topic,
+          question: q.question,
+          options: q.options || { A: '', B: '', C: '', D: '' },
+          correctAnswer: q.correctAnswer || 'A',
+        }));
+        const blob = new Blob([JSON.stringify(list, null, 2)], {
+          type: 'application/json;charset=utf-8',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'bo_cau_hoi_rung_chuong_vang.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+
+      socket.on('import_questions_result', ({ ok, message } = {}) => {
+        importFileStatus.hidden = false;
+        importFileStatus.className = ok ? 'status-line connected' : 'status-line error';
+        importFileStatus.textContent = message || (ok ? 'Nhập file thành công!' : 'Nhập file thất bại.');
       });
 
       tiebreakFastestBtn.addEventListener('click', () => {
@@ -830,6 +1282,370 @@
         });
       });
 
+      // --- Hệ thống Âm thanh & Giọng đọc MC trên trang điều khiển ---
+      let audioCtx = null;
+      let speechVoices = [];
+      let speechQueue = [];
+      let isSpeaking = false;
+      let activeTtsAudio = null;
+      let speechSafetyTimer = null;
+      let speechRetryTimer = null;
+      let speechSessionId = 0;
+      let pendingLateNames = [];
+      let lateBatchTimer = null;
+      let lastLateSpeechAt = 0;
+      const LATE_TTS_COOLDOWN_MS = 15000;
+
+      function claimAdminAudioHost() {
+        try {
+          window.localStorage.setItem('rcv_admin_audio_host', String(Date.now()));
+        } catch {}
+      }
+      claimAdminAudioHost();
+      const adminAudioHeartbeat = setInterval(claimAdminAudioHost, 1500);
+      window.addEventListener('beforeunload', () => {
+        clearInterval(adminAudioHeartbeat);
+        try {
+          window.localStorage.removeItem('rcv_admin_audio_host');
+        } catch {}
+      });
+
+      function updateAudioControlButtons() {
+        toggleVoiceBtn.textContent = voiceEnabled ? 'Giọng đọc: Bật' : 'Giọng đọc: Tắt';
+        toggleVoiceBtn.classList.toggle('is-active', voiceEnabled);
+        toggleSoundBtn.textContent = soundEnabled ? 'Âm thanh: Bật' : 'Âm thanh: Tắt';
+        toggleSoundBtn.classList.toggle('is-active', soundEnabled);
+      }
+
+      function ensureAudioContext() {
+        if (!soundEnabled) return null;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return null;
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+        return audioCtx;
+      }
+
+      function playTone(freq, startOffset, duration, type = 'sine', volume = 0.14) {
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime + startOffset;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      function playQuestionStartSfx() {
+        if (!soundEnabled) return;
+        [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+          playTone(freq, i * 0.08, 0.28, 'triangle', 0.14);
+        });
+      }
+
+      function playCountdownTickSfx(isFinalSecond) {
+        if (!soundEnabled) return;
+        playTone(isFinalSecond ? 1174.66 : 880, 0, 0.09, 'square', 0.06);
+      }
+
+      function playRevealSfx(eliminatedCount) {
+        if (!soundEnabled) return;
+        playTone(659.25, 0, 0.35, 'triangle', 0.15);
+        playTone(987.77, 0.08, 0.45, 'sine', 0.14);
+        if (eliminatedCount > 0) {
+          playTone(220, 0.22, 0.32, 'sawtooth', 0.06);
+        }
+      }
+
+      function playWinnerSfx() {
+        if (!soundEnabled) return;
+        [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((freq, i) => {
+          playTone(freq, i * 0.1, 0.45, 'triangle', 0.16);
+        });
+        playTone(1567.98, 0.52, 0.9, 'sine', 0.18);
+      }
+
+      function playLateCommenterSfx() {
+        if (!soundEnabled) return;
+        playTone(783.99, 0, 0.18, 'sine', 0.1);
+        playTone(987.77, 0.1, 0.24, 'sine', 0.11);
+      }
+
+      function loadVoices() {
+        if (!('speechSynthesis' in window)) return;
+        speechVoices = window.speechSynthesis.getVoices() || [];
+      }
+      if ('speechSynthesis' in window) {
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+
+      function stopAllSpeech() {
+        speechSessionId += 1;
+        speechQueue = [];
+        isSpeaking = false;
+        if (speechSafetyTimer) {
+          clearTimeout(speechSafetyTimer);
+          speechSafetyTimer = null;
+        }
+        if (speechRetryTimer) {
+          clearTimeout(speechRetryTimer);
+          speechRetryTimer = null;
+        }
+        if (activeTtsAudio) {
+          try {
+            activeTtsAudio.onended = null;
+            activeTtsAudio.onerror = null;
+            activeTtsAudio.pause();
+            activeTtsAudio.removeAttribute('src');
+            activeTtsAudio.load();
+          } catch {}
+          activeTtsAudio = null;
+        }
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      }
+
+      function speakWithWebSpeech(text, rate, sessionId, onDone) {
+        if (sessionId !== speechSessionId) return;
+        if (!('speechSynthesis' in window)) {
+          onDone();
+          return;
+        }
+        const voices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices() || [];
+        const viVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('vi'));
+        // Tuyệt đối không dùng giọng mặc định tiếng Anh nếu hệ điều hành không có giọng tiếng Việt
+        if (!viVoice) {
+          onDone();
+          return;
+        }
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'vi-VN';
+          utterance.voice = viVoice;
+          utterance.rate = rate || 1.02;
+          utterance.pitch = 1.05;
+
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            if (speechSafetyTimer) {
+              clearTimeout(speechSafetyTimer);
+              speechSafetyTimer = null;
+            }
+            if (sessionId === speechSessionId) {
+              onDone();
+            }
+          };
+
+          utterance.onend = finish;
+          utterance.onerror = finish;
+          speechSafetyTimer = setTimeout(finish, 12000);
+          window.speechSynthesis.speak(utterance);
+        } catch {
+          if (sessionId === speechSessionId) {
+            onDone();
+          }
+        }
+      }
+
+      function processSpeechQueue() {
+        if (!voiceEnabled) {
+          stopAllSpeech();
+          return;
+        }
+        if (isSpeaking || speechQueue.length === 0) return;
+
+        const nextItem = speechQueue.shift();
+        const sessionId = speechSessionId;
+        isSpeaking = true;
+
+        const advanceQueue = () => {
+          if (sessionId !== speechSessionId) return;
+          isSpeaking = false;
+          if (speechSafetyTimer) {
+            clearTimeout(speechSafetyTimer);
+            speechSafetyTimer = null;
+          }
+          if (speechRetryTimer) {
+            clearTimeout(speechRetryTimer);
+            speechRetryTimer = null;
+          }
+          processSpeechQueue();
+        };
+
+        const playTtsAttempt = (attempt) => {
+          if (sessionId !== speechSessionId || !voiceEnabled) return;
+          try {
+            const audio = new Audio(`/api/tts?text=${encodeURIComponent(nextItem.text)}`);
+            activeTtsAudio = audio;
+            audio.playbackRate = nextItem.rate || 1.0;
+
+            let settled = false;
+            const handleFailure = () => {
+              if (settled || sessionId !== speechSessionId) return;
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              activeTtsAudio = null;
+              if (speechSafetyTimer) {
+                clearTimeout(speechSafetyTimer);
+                speechSafetyTimer = null;
+              }
+              if (attempt === 0) {
+                speechRetryTimer = setTimeout(() => {
+                  speechRetryTimer = null;
+                  if (sessionId === speechSessionId) {
+                    playTtsAttempt(1);
+                  }
+                }, 220);
+                return;
+              }
+              speakWithWebSpeech(nextItem.text, nextItem.rate, sessionId, advanceQueue);
+            };
+
+            audio.onended = () => {
+              if (settled || sessionId !== speechSessionId) return;
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              activeTtsAudio = null;
+              advanceQueue();
+            };
+            audio.onerror = handleFailure;
+
+            speechSafetyTimer = setTimeout(() => {
+              if (!settled && sessionId === speechSessionId) {
+                settled = true;
+                audio.onended = null;
+                audio.onerror = null;
+                try {
+                  audio.pause();
+                  audio.removeAttribute('src');
+                  audio.load();
+                } catch {}
+                activeTtsAudio = null;
+                advanceQueue();
+              }
+            }, 15000);
+
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch((err) => {
+                if (sessionId !== speechSessionId) return;
+                if (err && err.name === 'AbortError') return;
+                handleFailure();
+              });
+            }
+          } catch {
+            speakWithWebSpeech(nextItem.text, nextItem.rate, sessionId, advanceQueue);
+          }
+        };
+
+        playTtsAttempt(0);
+      }
+
+      function speakVietnamese(text, { priority = 'normal', rate = 1.02 } = {}) {
+        if (!voiceEnabled || !text) return;
+
+        if (priority === 'high') {
+          stopAllSpeech();
+          speechQueue = [{ text, rate }];
+          processSpeechQueue();
+          return;
+        }
+
+        if (speechQueue.length >= 4) {
+          speechQueue.shift();
+        }
+        speechQueue.push({ text, rate });
+        processSpeechQueue();
+      }
+
+      ['pointerdown', 'keydown'].forEach((evt) => {
+        window.addEventListener(
+          evt,
+          () => {
+            claimAdminAudioHost();
+            if (soundEnabled) ensureAudioContext();
+          },
+          { passive: true }
+        );
+      });
+
+      toggleVoiceBtn.addEventListener('click', () => {
+        const nextVoice = !voiceEnabled;
+        if (!nextVoice) {
+          stopAllSpeech();
+        } else {
+          ensureAudioContext();
+        }
+        socket.emit('set_audio_settings', { voiceEnabled: nextVoice });
+      });
+
+      toggleSoundBtn.addEventListener('click', () => {
+        const nextSound = !soundEnabled;
+        if (nextSound) {
+          ensureAudioContext();
+        }
+        socket.emit('set_audio_settings', { soundEnabled: nextSound });
+      });
+
+      testVoiceBtn.addEventListener('click', () => {
+        claimAdminAudioHost();
+        ensureAudioContext();
+        if (!voiceEnabled) {
+          socket.emit('set_audio_settings', { voiceEnabled: true });
+          voiceEnabled = true;
+          updateAudioControlButtons();
+        }
+        playLateCommenterSfx();
+        speakVietnamese('Hệ thống Rung Chuông Vàng đã sẵn sàng. Giọng đọc đang hoạt động bình thường!', {
+          priority: 'high',
+          rate: 1.0,
+        });
+      });
+
+      function renderAutoModeUi(isAuto, statusText) {
+        if (isAuto) {
+          autoStatusLine.className = 'status-line connected';
+          autoStatusLine.textContent = statusText || 'Vận hành tự động: Đang bật';
+          toggleAutoModeBtn.className = 'btn btn-gold';
+          toggleAutoModeBtn.textContent = 'Tắt Tự động';
+        } else {
+          autoStatusLine.className = 'status-line';
+          autoStatusLine.textContent = 'Vận hành tự động: Đang tắt (điều khiển thủ công)';
+          toggleAutoModeBtn.className = 'btn btn-secondary';
+          toggleAutoModeBtn.textContent = 'Bật Tự động vận hành';
+        }
+      }
+
+      toggleAutoModeBtn.addEventListener('click', () => {
+        const nextAuto = !autoMode;
+        const pickCount = Number(randomCountInput.value) || 15;
+        const transitionSeconds = Number(autoTransitionSelect.value) || 9;
+        socket.emit('set_auto_mode', { enabled: nextAuto, pickCount, transitionSeconds });
+      });
+
+      autoTransitionSelect.addEventListener('change', () => {
+        const transitionSeconds = Number(autoTransitionSelect.value) || 9;
+        socket.emit('set_auto_mode', { transitionSeconds });
+      });
+
       // Socket listeners
       socket.on('init_logs', (logs) => {
         systemLogBox.innerHTML = '';
@@ -844,8 +1660,87 @@
         renderState(state);
       });
 
+      socket.on('auto_status', ({ autoMode: nextAuto, autoTransitionSeconds, autoStatus } = {}) => {
+        if (typeof nextAuto === 'boolean') {
+          autoMode = nextAuto;
+        }
+        if (typeof autoTransitionSeconds === 'number') {
+          autoTransitionSelect.value = String(autoTransitionSeconds);
+        }
+        renderAutoModeUi(autoMode, autoStatus || '');
+      });
+
+      socket.on('question_started', ({ questionIndex, question } = {}) => {
+        playQuestionStartSfx();
+        if (question) {
+          speakVietnamese(`Câu hỏi số ${(questionIndex ?? 0) + 1}: ${question}`, {
+            priority: 'high',
+            rate: 1.04,
+          });
+        }
+      });
+
       socket.on('timer_tick', ({ timeLeft }) => {
         statTimer.textContent = `${timeLeft}s`;
+        if (latestState) {
+          latestState.timeLeft = timeLeft;
+        }
+        if (latestState?.phase === 'QUESTION' && timeLeft > 0 && timeLeft <= 5) {
+          playCountdownTickSfx(timeLeft === 1);
+        }
+      });
+
+      socket.on('reveal_answer', ({ correctAnswer, correctOptionText, eliminatedThisRound } = {}) => {
+        playRevealSfx(eliminatedThisRound || 0);
+        if (correctAnswer) {
+          const text = correctOptionText
+            ? `Hết giờ! Đáp án chính xác là ${correctAnswer}, ${correctOptionText}.`
+            : `Hết giờ! Đáp án chính xác là ${correctAnswer}.`;
+          speakVietnamese(text, { priority: 'high', rate: 1.0 });
+        }
+      });
+
+      socket.on('game_winner', ({ winner, reason } = {}) => {
+        playWinnerSfx();
+        if (winner) {
+          const winnerName = winner.nickname || winner.uniqueId;
+          const isAfterReveal = reason === 'last_survivor';
+          speakVietnamese(
+            `Xin chúc mừng ${winnerName}, người chiến thắng cuối cùng đã Rung Chuông Vàng!`,
+            { priority: isAfterReveal ? 'normal' : 'high', rate: 0.98 }
+          );
+        }
+      });
+
+      socket.on('late_commenter', ({ nickname, uniqueId } = {}) => {
+        const displayName = (nickname || uniqueId || 'bạn').trim();
+        if (!displayName) return;
+
+        pendingLateNames.push(displayName);
+        if (lateBatchTimer) clearTimeout(lateBatchTimer);
+
+        lateBatchTimer = setTimeout(() => {
+          const names = pendingLateNames.splice(0, 4);
+          pendingLateNames = [];
+          if (names.length === 0) return;
+
+          const now = Date.now();
+          const currentPhase = latestState?.phase;
+          const currentTimeLeft = latestState?.timeLeft ?? 0;
+          const isQuietMoment =
+            !isSpeaking &&
+            currentPhase !== 'WINNER' &&
+            !(currentPhase === 'QUESTION' && currentTimeLeft <= 5);
+
+          if (isQuietMoment && now - lastLateSpeechAt >= LATE_TTS_COOLDOWN_MS) {
+            lastLateSpeechAt = now;
+            playLateCommenterSfx();
+            speakVietnamese(
+              'Chào các bạn, các bạn vào bình luận sau nên sẽ tham gia vòng sau nhé!',
+              { priority: 'normal', rate: 1.04 }
+            );
+          }
+        }, 900);
       });
 
       socket.on('connect', () => {

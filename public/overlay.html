@@ -777,6 +777,39 @@
         color: #a7f3d0;
       }
 
+      /* Thông báo người vào bình luận sau (tham gia vòng sau) & nút âm thanh */
+      .waitlist-banner {
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 12px 18px;
+        border-radius: 12px;
+        background: rgba(245, 196, 81, 0.14);
+        border: 1.5px solid rgba(245, 196, 81, 0.45);
+        color: #fef3c7;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .waitlist-banner.visible {
+        display: flex;
+      }
+
+      .fireworks-canvas {
+        position: absolute;
+        inset: 0;
+        width: 1080px;
+        height: 1920px;
+        z-index: 15;
+        pointer-events: none;
+        display: none;
+      }
+
+      .fireworks-canvas.active {
+        display: block;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         * {
           animation-duration: 0.01ms !important;
@@ -788,6 +821,7 @@
   <body>
     <div class="viewport-wrapper">
       <main id="stageCanvas" class="stage-canvas" aria-label="Giao diện phát sóng Rung Chuông Vàng 1080x1920">
+        <canvas id="fireworksCanvas" class="fireworks-canvas" width="1080" height="1920" aria-hidden="true"></canvas>
         <!-- 1. Tiêu đề RUNG CHUÔNG VÀNG -->
         <header class="header-section">
           <div id="bellCrest" class="bell-crest" aria-hidden="true">
@@ -875,6 +909,7 @@
             <h2 class="arena-title">LỚP HỌC THI ĐẤU · SÂN KHẤU THÍ SINH</h2>
             <div id="arenaLegend" class="arena-legend">Chỗ ngồi: 0 / 30</div>
           </div>
+          <div id="waitlistBanner" class="waitlist-banner" aria-live="polite"></div>
           <div id="playersGrid" class="classroom-stage">
             <div class="empty-arena">
               <div class="empty-arena-title">Lớp học đang chờ thí sinh vào chỗ ngồi</div>
@@ -966,7 +1001,19 @@
           players,
           winner,
           rosterLocked,
+          soundEnabled: serverSoundEnabled,
+          voiceEnabled: serverVoiceEnabled,
         } = state;
+
+        if (typeof serverSoundEnabled === 'boolean') {
+          soundEnabled = serverSoundEnabled;
+        }
+        if (typeof serverVoiceEnabled === 'boolean') {
+          if (voiceEnabled && !serverVoiceEnabled) {
+            stopAllSpeech();
+          }
+          voiceEnabled = serverVoiceEnabled;
+        }
 
         const isEnded = phase === 'REVEAL' || phase === 'WINNER' || phase === 'GAME_OVER';
 
@@ -982,7 +1029,7 @@
             : 'Hãy chuẩn bị sẵn sàng! Khi câu hỏi xuất hiện, thí sinh có 15 giây để bình luận đáp án đúng.';
           questionText.classList.add('idle-text');
         } else {
-          questionKicker.textContent = `Câu hỏi 0${currentQuestion.index + 1} / 0${currentQuestion.total} · ${currentQuestion.topic}`;
+          questionKicker.textContent = `Câu hỏi ${String(currentQuestion.index + 1).padStart(2, '0')} / ${String(currentQuestion.total).padStart(2, '0')} · ${currentQuestion.topic}`;
           questionText.textContent = currentQuestion.question;
           questionText.classList.remove('idle-text');
 
@@ -1043,6 +1090,7 @@
 
         // 4. Sân khấu thí sinh kiểu lớp học hoặc Vinh danh Quán quân cuối cùng còn lại
         if (phase === 'WINNER' && winner) {
+          startFireworks();
           const safeWinnerName = escapeHtml(winner.nickname || winner.uniqueId);
           const safeWinnerId = escapeHtml(winner.uniqueId);
           const winnerFallback = createFallbackAvatarDataUri(winner.nickname || winner.uniqueId);
@@ -1066,6 +1114,8 @@
           `;
           return;
         }
+
+        stopFireworks();
 
         // Sắp xếp bàn học theo thứ tự còn trụ hạng lên hàng đầu
         const sortedPlayers = [...(players || [])].sort((a, b) => {
@@ -1154,8 +1204,468 @@
         `;
       }
 
+      const waitlistBanner = document.getElementById('waitlistBanner');
+
+      let soundEnabled = true;
+      let voiceEnabled = true;
+      let audioCtx = null;
+      let speechVoices = [];
+      let speechQueue = [];
+      let isSpeaking = false;
+      let activeTtsAudio = null;
+      let speechSafetyTimer = null;
+      let speechRetryTimer = null;
+      let speechSessionId = 0;
+      let pendingLateNames = [];
+      let lateBatchTimer = null;
+      let waitlistBannerTimer = null;
+      let lastLateSpeechAt = 0;
+      const LATE_TTS_COOLDOWN_MS = 15000;
+
+      // Nếu trang /admin đang mở trong cùng trình duyệt (hoặc cùng Portal /),
+      // /admin sẽ phát âm thanh & giọng đọc trực tiếp để tránh vọng tiếng và tránh lỗi autoplay trong iframe.
+      function isAdminHandlingAudioInSameBrowser() {
+        try {
+          const ts = Number(window.localStorage.getItem('rcv_admin_audio_host') || 0);
+          return Date.now() - ts < 4500;
+        } catch {
+          return false;
+        }
+      }
+
+      function ensureAudioContext() {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return null;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return null;
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(() => {});
+        }
+        return audioCtx;
+      }
+
+      function playTone(freq, startOffset, duration, type = 'sine', volume = 0.14) {
+        const ctx = ensureAudioContext();
+        if (!ctx) return;
+        const now = ctx.currentTime + startOffset;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(volume, now + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + duration + 0.02);
+      }
+
+      function playQuestionStartSfx() {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return;
+        [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+          playTone(freq, i * 0.08, 0.28, 'triangle', 0.14);
+        });
+      }
+
+      function playCountdownTickSfx(isFinalSecond) {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return;
+        playTone(isFinalSecond ? 1174.66 : 880, 0, 0.09, 'square', 0.06);
+      }
+
+      function playRevealSfx(eliminatedCount) {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return;
+        playTone(659.25, 0, 0.35, 'triangle', 0.15);
+        playTone(987.77, 0.08, 0.45, 'sine', 0.14);
+        if (eliminatedCount > 0) {
+          playTone(220, 0.22, 0.32, 'sawtooth', 0.06);
+        }
+      }
+
+      function playWinnerSfx() {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return;
+        const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
+        notes.forEach((freq, i) => {
+          playTone(freq, i * 0.1, 0.45, 'triangle', 0.16);
+        });
+        playTone(1567.98, 0.52, 0.9, 'sine', 0.18);
+      }
+
+      function playLateCommenterSfx() {
+        if (!soundEnabled || isAdminHandlingAudioInSameBrowser()) return;
+        playTone(783.99, 0, 0.18, 'sine', 0.1);
+        playTone(987.77, 0.1, 0.24, 'sine', 0.11);
+      }
+
+      function loadVoices() {
+        if (!('speechSynthesis' in window)) return;
+        speechVoices = window.speechSynthesis.getVoices() || [];
+      }
+      if ('speechSynthesis' in window) {
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }
+
+      function stopAllSpeech() {
+        speechSessionId += 1;
+        speechQueue = [];
+        isSpeaking = false;
+        if (speechSafetyTimer) {
+          clearTimeout(speechSafetyTimer);
+          speechSafetyTimer = null;
+        }
+        if (speechRetryTimer) {
+          clearTimeout(speechRetryTimer);
+          speechRetryTimer = null;
+        }
+        if (activeTtsAudio) {
+          try {
+            activeTtsAudio.onended = null;
+            activeTtsAudio.onerror = null;
+            activeTtsAudio.pause();
+            activeTtsAudio.removeAttribute('src');
+            activeTtsAudio.load();
+          } catch {}
+          activeTtsAudio = null;
+        }
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      }
+
+      function speakWithWebSpeech(text, rate, sessionId, onDone) {
+        if (sessionId !== speechSessionId) return;
+        if (!('speechSynthesis' in window)) {
+          onDone();
+          return;
+        }
+        const voices = speechVoices.length > 0 ? speechVoices : window.speechSynthesis.getVoices() || [];
+        const viVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith('vi'));
+        // Tuyệt đối không dùng giọng mặc định tiếng Anh nếu hệ điều hành không có giọng tiếng Việt
+        if (!viVoice) {
+          onDone();
+          return;
+        }
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'vi-VN';
+          utterance.voice = viVoice;
+          utterance.rate = rate || 1.02;
+          utterance.pitch = 1.05;
+
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            if (speechSafetyTimer) {
+              clearTimeout(speechSafetyTimer);
+              speechSafetyTimer = null;
+            }
+            if (sessionId === speechSessionId) {
+              onDone();
+            }
+          };
+
+          utterance.onend = finish;
+          utterance.onerror = finish;
+          speechSafetyTimer = setTimeout(finish, 12000);
+          window.speechSynthesis.speak(utterance);
+        } catch {
+          if (sessionId === speechSessionId) {
+            onDone();
+          }
+        }
+      }
+
+      function processSpeechQueue() {
+        if (!voiceEnabled || isAdminHandlingAudioInSameBrowser()) {
+          stopAllSpeech();
+          return;
+        }
+        if (isSpeaking || speechQueue.length === 0) return;
+
+        const nextItem = speechQueue.shift();
+        const sessionId = speechSessionId;
+        isSpeaking = true;
+
+        const advanceQueue = () => {
+          if (sessionId !== speechSessionId) return;
+          isSpeaking = false;
+          if (speechSafetyTimer) {
+            clearTimeout(speechSafetyTimer);
+            speechSafetyTimer = null;
+          }
+          if (speechRetryTimer) {
+            clearTimeout(speechRetryTimer);
+            speechRetryTimer = null;
+          }
+          processSpeechQueue();
+        };
+
+        const playTtsAttempt = (attempt) => {
+          if (sessionId !== speechSessionId || !voiceEnabled || isAdminHandlingAudioInSameBrowser()) return;
+          try {
+            const audio = new Audio(`/api/tts?text=${encodeURIComponent(nextItem.text)}`);
+            activeTtsAudio = audio;
+            audio.playbackRate = nextItem.rate || 1.0;
+
+            let settled = false;
+            const handleFailure = () => {
+              if (settled || sessionId !== speechSessionId) return;
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              activeTtsAudio = null;
+              if (speechSafetyTimer) {
+                clearTimeout(speechSafetyTimer);
+                speechSafetyTimer = null;
+              }
+              if (attempt === 0) {
+                speechRetryTimer = setTimeout(() => {
+                  speechRetryTimer = null;
+                  if (sessionId === speechSessionId) {
+                    playTtsAttempt(1);
+                  }
+                }, 220);
+                return;
+              }
+              speakWithWebSpeech(nextItem.text, nextItem.rate, sessionId, advanceQueue);
+            };
+
+            audio.onended = () => {
+              if (settled || sessionId !== speechSessionId) return;
+              settled = true;
+              audio.onended = null;
+              audio.onerror = null;
+              activeTtsAudio = null;
+              advanceQueue();
+            };
+            audio.onerror = handleFailure;
+
+            speechSafetyTimer = setTimeout(() => {
+              if (!settled && sessionId === speechSessionId) {
+                settled = true;
+                audio.onended = null;
+                audio.onerror = null;
+                try {
+                  audio.pause();
+                  audio.removeAttribute('src');
+                  audio.load();
+                } catch {}
+                activeTtsAudio = null;
+                advanceQueue();
+              }
+            }, 15000);
+
+            const playPromise = audio.play();
+            if (playPromise && typeof playPromise.catch === 'function') {
+              playPromise.catch((err) => {
+                if (sessionId !== speechSessionId) return;
+                if (err && err.name === 'AbortError') return;
+                handleFailure();
+              });
+            }
+          } catch {
+            speakWithWebSpeech(nextItem.text, nextItem.rate, sessionId, advanceQueue);
+          }
+        };
+
+        playTtsAttempt(0);
+      }
+
+      function speakVietnamese(text, { priority = 'normal', rate = 1.02 } = {}) {
+        if (!voiceEnabled || !text || isAdminHandlingAudioInSameBrowser()) return;
+
+        if (priority === 'high') {
+          stopAllSpeech();
+          speechQueue = [{ text, rate }];
+          processSpeechQueue();
+          return;
+        }
+
+        if (speechQueue.length >= 4) {
+          speechQueue.shift();
+        }
+        speechQueue.push({ text, rate });
+        processSpeechQueue();
+      }
+
+      ['pointerdown', 'keydown'].forEach((evt) => {
+        window.addEventListener(
+          evt,
+          () => {
+            if (soundEnabled && !isAdminHandlingAudioInSameBrowser()) ensureAudioContext();
+          },
+          { once: true }
+        );
+      });
+
+      function showWaitlistNotice(names) {
+        waitlistBanner.textContent = `Hàng chờ vòng sau (${names.join(', ')}): Chào các bạn, các bạn vào bình luận sau nên sẽ tham gia vòng sau nhé!`;
+        waitlistBanner.classList.add('visible');
+
+        if (waitlistBannerTimer) clearTimeout(waitlistBannerTimer);
+        waitlistBannerTimer = setTimeout(() => {
+          waitlistBanner.classList.remove('visible');
+        }, 4500);
+      }
+
+      // Hiệu ứng pháo hoa mừng Quán quân cuối cùng
+      const fireworksCanvas = document.getElementById('fireworksCanvas');
+      const fwCtx = fireworksCanvas.getContext('2d');
+      const FIREWORK_COLORS = ['#FFE18C', '#F5C451', '#34D399', '#FB7185', '#60A5FA', '#FBBF24', '#FFFFFF'];
+      let fwParticles = [];
+      let fwRockets = [];
+      let fwAnimationId = null;
+      let fwSpawnTimer = null;
+      let fwActive = false;
+
+      function playFireworkPopSfx() {
+        if (!soundEnabled) return;
+        const baseFreq = 180 + Math.random() * 140;
+        playTone(baseFreq, 0, 0.14, 'triangle', 0.055);
+        playTone(baseFreq * 2.2, 0.03, 0.1, 'sine', 0.04);
+      }
+
+      function createExplosion(x, y) {
+        const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+        const secondaryColor = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
+        const count = 48 + Math.floor(Math.random() * 24);
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.15;
+          const speed = 3 + Math.random() * 7.5;
+          fwParticles.push({
+            x,
+            y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            alpha: 1,
+            decay: 0.012 + Math.random() * 0.012,
+            radius: 2.5 + Math.random() * 3.5,
+            color: i % 3 === 0 ? secondaryColor : color,
+          });
+        }
+        playFireworkPopSfx();
+      }
+
+      function launchFireworkRocket(customX, customTargetY) {
+        const x = customX ?? 140 + Math.random() * 800;
+        const targetY = customTargetY ?? 220 + Math.random() * 980;
+        fwRockets.push({
+          x,
+          y: 1890,
+          vx: (Math.random() - 0.5) * 2.2,
+          vy: -(18 + Math.random() * 7),
+          targetY,
+          color: FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)],
+        });
+      }
+
+      function renderFireworksFrame() {
+        if (!fwActive) return;
+        fwCtx.globalCompositeOperation = 'destination-out';
+        fwCtx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        fwCtx.fillRect(0, 0, 1080, 1920);
+        fwCtx.globalCompositeOperation = 'lighter';
+
+        for (let i = fwRockets.length - 1; i >= 0; i--) {
+          const r = fwRockets[i];
+          r.x += r.vx;
+          r.y += r.vy;
+          r.vy += 0.22;
+
+          fwCtx.beginPath();
+          fwCtx.arc(r.x, r.y, 4, 0, Math.PI * 2);
+          fwCtx.fillStyle = r.color;
+          fwCtx.fill();
+
+          if (r.y <= r.targetY || r.vy >= -2) {
+            createExplosion(r.x, r.y);
+            fwRockets.splice(i, 1);
+          }
+        }
+
+        for (let i = fwParticles.length - 1; i >= 0; i--) {
+          const p = fwParticles[i];
+          p.vx *= 0.975;
+          p.vy = p.vy * 0.975 + 0.14;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.alpha -= p.decay;
+
+          if (p.alpha <= 0) {
+            fwParticles.splice(i, 1);
+            continue;
+          }
+
+          fwCtx.save();
+          fwCtx.globalAlpha = p.alpha;
+          fwCtx.beginPath();
+          fwCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          fwCtx.fillStyle = p.color;
+          fwCtx.fill();
+          fwCtx.restore();
+        }
+
+        fwAnimationId = requestAnimationFrame(renderFireworksFrame);
+      }
+
+      function startFireworks() {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        if (fwActive) return;
+        fwActive = true;
+        fireworksCanvas.classList.add('active');
+        fwCtx.clearRect(0, 0, 1080, 1920);
+
+        // Bắn loạt pháo hoa mở màn rực rỡ quanh khung vinh danh
+        createExplosion(260, 1180);
+        setTimeout(() => fwActive && createExplosion(820, 1180), 180);
+        setTimeout(() => fwActive && createExplosion(540, 320), 340);
+
+        fwSpawnTimer = setInterval(() => {
+          if (!fwActive) return;
+          launchFireworkRocket();
+          if (Math.random() > 0.45) {
+            launchFireworkRocket();
+          }
+        }, 620);
+
+        fwAnimationId = requestAnimationFrame(renderFireworksFrame);
+      }
+
+      function stopFireworks() {
+        if (!fwActive) return;
+        fwActive = false;
+        fireworksCanvas.classList.remove('active');
+        if (fwAnimationId) {
+          cancelAnimationFrame(fwAnimationId);
+          fwAnimationId = null;
+        }
+        if (fwSpawnTimer) {
+          clearInterval(fwSpawnTimer);
+          fwSpawnTimer = null;
+        }
+        fwParticles = [];
+        fwRockets = [];
+        fwCtx.clearRect(0, 0, 1080, 1920);
+      }
+
       socket.on('sync_state', (state) => {
         renderState(state);
+      });
+
+      socket.on('question_started', ({ questionIndex, question } = {}) => {
+        stopFireworks();
+        playQuestionStartSfx();
+        if (question) {
+          speakVietnamese(`Câu hỏi số ${(questionIndex ?? 0) + 1}: ${question}`, {
+            priority: 'high',
+            rate: 1.04,
+          });
+        }
       });
 
       socket.on('timer_tick', ({ timeLeft }) => {
@@ -1165,19 +1675,78 @@
         if (latestState.phase === 'QUESTION') {
           phaseStatus.textContent =
             timeLeft <= 5 ? 'Sắp hết giờ — Chốt đáp án ngay!' : 'Đang nhận đáp án A, B, C, D';
+          if (timeLeft > 0 && timeLeft <= 5) {
+            playCountdownTickSfx(timeLeft === 1);
+          }
         }
       });
 
-      socket.on('reveal_answer', () => {
+      socket.on('reveal_answer', ({ correctAnswer, correctOptionText, eliminatedThisRound } = {}) => {
         bellCrest.classList.remove('ringing');
         void bellCrest.offsetWidth;
         bellCrest.classList.add('ringing');
+        playRevealSfx(eliminatedThisRound || 0);
+        if (correctAnswer) {
+          const text = correctOptionText
+            ? `Hết giờ! Đáp án chính xác là ${correctAnswer}, ${correctOptionText}.`
+            : `Hết giờ! Đáp án chính xác là ${correctAnswer}.`;
+          speakVietnamese(text, { priority: 'high', rate: 1.0 });
+        }
       });
 
-      socket.on('game_winner', () => {
+      socket.on('game_winner', ({ winner, reason } = {}) => {
         bellCrest.classList.remove('ringing');
         void bellCrest.offsetWidth;
         bellCrest.classList.add('ringing');
+        playWinnerSfx();
+        startFireworks();
+        if (winner) {
+          const winnerName = winner.nickname || winner.uniqueId;
+          const isAfterReveal = reason === 'last_survivor';
+          speakVietnamese(
+            `Xin chúc mừng ${winnerName}, người chiến thắng cuối cùng đã Rung Chuông Vàng!`,
+            { priority: isAfterReveal ? 'normal' : 'high', rate: 0.98 }
+          );
+        }
+      });
+
+      socket.on('late_commenter', ({ nickname, uniqueId } = {}) => {
+        const displayName = (nickname || uniqueId || 'bạn').trim();
+        if (!displayName) return;
+
+        pendingLateNames.push(displayName);
+        if (lateBatchTimer) clearTimeout(lateBatchTimer);
+
+        lateBatchTimer = setTimeout(() => {
+          const names = pendingLateNames.splice(0, 4);
+          pendingLateNames = [];
+          if (names.length === 0) return;
+
+          showWaitlistNotice(names);
+
+          const now = Date.now();
+          const currentPhase = latestState?.phase;
+          const currentTimeLeft = latestState?.timeLeft ?? 0;
+          const isQuietMoment =
+            !isSpeaking &&
+            currentPhase !== 'WINNER' &&
+            !(currentPhase === 'QUESTION' && currentTimeLeft <= 5);
+
+          if (isQuietMoment && now - lastLateSpeechAt >= LATE_TTS_COOLDOWN_MS) {
+            lastLateSpeechAt = now;
+            playLateCommenterSfx();
+            speakVietnamese(
+              'Chào các bạn, các bạn vào bình luận sau nên sẽ tham gia vòng sau nhé!',
+              { priority: 'normal', rate: 1.04 }
+            );
+          }
+        }, 900);
+      });
+
+      socket.on('voice_test', ({ text } = {}) => {
+        if (!text) return;
+        playLateCommenterSfx();
+        speakVietnamese(text, { priority: 'high', rate: 1.0 });
       });
 
       socket.on('connect', () => {
