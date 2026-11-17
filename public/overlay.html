@@ -112,10 +112,27 @@
       .bunting-strip {
         position: absolute;
         top: 0;
-        left: 0;
-        right: 0;
-        height: 44px;
+        left: -16px;
+        right: -16px;
+        width: calc(100% + 32px);
+        height: 46px;
         z-index: 3;
+        pointer-events: none;
+        transform-origin: top center;
+        animation: buntingSway 5.5s ease-in-out infinite;
+      }
+
+      @keyframes buntingSway {
+        0%, 100% { transform: translateY(0px) rotate(-0.35deg); }
+        50% { transform: translateY(3px) rotate(0.35deg); }
+      }
+
+      .ambient-canvas {
+        position: absolute;
+        inset: 0;
+        width: 1080px;
+        height: 1920px;
+        z-index: 2;
         pointer-events: none;
       }
 
@@ -149,11 +166,33 @@
         background: linear-gradient(145deg, #fde047 0%, #f59e0b 100%);
         border: 4px solid #ffffff;
         box-shadow: 0 8px 18px rgba(180, 83, 9, 0.25);
+        animation: bellIdlePulse 3.2s ease-in-out infinite;
+      }
+
+      .bell-crest svg {
+        transform-origin: top center;
+        animation: bellGentleTilt 4.2s ease-in-out infinite;
       }
 
       .bell-crest.ringing svg {
         animation: bellSwing 0.55s ease-in-out 2;
         transform-origin: top center;
+      }
+
+      @keyframes bellIdlePulse {
+        0%, 100% {
+          transform: translateY(0px) scale(1);
+          box-shadow: 0 8px 18px rgba(180, 83, 9, 0.25), 0 0 0 0 rgba(245, 158, 11, 0.35);
+        }
+        50% {
+          transform: translateY(-2px) scale(1.03);
+          box-shadow: 0 12px 24px rgba(180, 83, 9, 0.32), 0 0 0 12px rgba(245, 158, 11, 0);
+        }
+      }
+
+      @keyframes bellGentleTilt {
+        0%, 100% { transform: rotate(-4deg); }
+        50% { transform: rotate(4deg); }
       }
 
       @keyframes bellSwing {
@@ -342,17 +381,26 @@
       }
 
       .progress-fill {
+        position: relative;
         width: 100%;
         height: 100%;
         transform-origin: left center;
         transform: scaleX(0);
-        background: linear-gradient(90deg, #f59e0b 0%, #fde047 100%);
+        background: linear-gradient(90deg, #f59e0b 0%, #fde047 50%, #f59e0b 100%);
+        background-size: 200% 100%;
         transition: transform 1s linear;
-        will-change: transform;
+        animation: progressShimmer 2.8s linear infinite;
+        will-change: transform, background-position;
       }
 
       .progress-fill.urgent {
-        background: linear-gradient(90deg, #dc2626 0%, #f97316 100%);
+        background: linear-gradient(90deg, #dc2626 0%, #fb923c 50%, #dc2626 100%);
+        background-size: 200% 100%;
+      }
+
+      @keyframes progressShimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
       }
 
       /* 3. Lưới 2x2 Thẻ Đáp Án kiểu Thẻ Học Tập vui nhộn */
@@ -616,6 +664,17 @@
         margin-bottom: 6px;
         flex-shrink: 0;
         z-index: 2;
+        animation: avatarSeatBob 3.6s ease-in-out infinite;
+        animation-delay: var(--seat-delay, 0s);
+      }
+
+      .desk-seat.eliminated .avatar-frame {
+        animation: none;
+      }
+
+      @keyframes avatarSeatBob {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-4px); }
       }
 
       .classroom-floor.compact .avatar-frame {
@@ -682,6 +741,12 @@
         justify-content: center;
         box-shadow: 0 4px 8px rgba(15, 23, 42, 0.25);
         z-index: 4;
+        animation: tagFloat 2.2s ease-in-out infinite;
+      }
+
+      @keyframes tagFloat {
+        0%, 100% { transform: rotate(-4deg) scale(1); }
+        50% { transform: rotate(4deg) scale(1.06); }
       }
 
       .classroom-floor.dense .answer-tag {
@@ -817,15 +882,49 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 40px;
+        padding: 36px 40px;
         text-align: center;
-        gap: 12px;
+        gap: 16px;
         color: var(--ink-body);
+      }
+
+      .empty-arena-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 22px;
+        border-radius: 999px;
+        background: #fef3c7;
+        border: 2px solid #f59e0b;
+        color: #9a3412;
+        font-size: 19px;
+        font-weight: 800;
+        animation: waitingPulse 2.4s ease-in-out infinite;
+      }
+
+      .live-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+        animation: liveDotPing 1.6s ease-out infinite;
+      }
+
+      @keyframes liveDotPing {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.65); }
+        70% { transform: scale(1.1); box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+      }
+
+      @keyframes waitingPulse {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-4px); }
       }
 
       .empty-arena-title {
         font-family: 'Bricolage Grotesque', 'Plus Jakarta Sans', sans-serif;
-        font-size: 30px;
+        font-size: 32px;
         font-weight: 800;
         color: #9a3412;
       }
@@ -835,6 +934,42 @@
         font-weight: 600;
         line-height: 1.5;
         max-width: 720px;
+      }
+
+      .waiting-meter-wrap {
+        width: 100%;
+        max-width: 560px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 4px;
+      }
+
+      .waiting-meter-track {
+        width: 100%;
+        height: 22px;
+        border-radius: 999px;
+        background: #fde68a;
+        border: 2px solid #d97706;
+        overflow: hidden;
+        padding: 2px;
+      }
+
+      .waiting-meter-fill {
+        height: 100%;
+        min-width: 28px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #f59e0b 0%, #10b981 50%, #f59e0b 100%);
+        background-size: 200% 100%;
+        animation: progressShimmer 2.2s linear infinite;
+        transition: width 0.35s ease;
+      }
+
+      .waiting-meter-caption {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 18px;
+        font-weight: 700;
+        color: #78350f;
       }
 
       /* Vinh danh Quán quân — Thủ khoa lớp học */
@@ -971,6 +1106,7 @@
           <polygon points="998,0 1050,0 1024,30" fill="#f59e0b" />
         </svg>
 
+        <canvas id="ambientCanvas" class="ambient-canvas" width="1080" height="1920" aria-hidden="true"></canvas>
         <canvas id="fireworksCanvas" class="fireworks-canvas" width="1080" height="1920" aria-hidden="true"></canvas>
 
         <!-- 1. Tiêu đề RUNG CHUÔNG VÀNG -->
@@ -1313,11 +1449,28 @@
             : `Chỗ ngồi: ${remaining} còn thi / ${total} bàn`;
 
         if (displayPlayers.length === 0) {
+          const targetCount = Number(state.autoPickCount) || 16;
+          const waitingCount = Math.max(stats?.total ?? 0, state.liveCommentersCount ?? 0);
+          const ratioPct = Math.max(6, Math.min(100, Math.round((waitingCount / Math.max(1, targetCount)) * 100)));
           playersGrid.innerHTML = `
             <div class="empty-arena">
-              <div class="empty-arena-title">Lớp học đang chờ các bạn vào chỗ ngồi</div>
+              <div class="empty-arena-badge">
+                <span class="live-dot" aria-hidden="true"></span>
+                <span>LỚP HỌC ĐANG MỞ CỬA ĐÓN THÍ SINH</span>
+              </div>
+              <div class="empty-arena-title">Bình luận ngay để lên ghế thi đấu!</div>
               <div class="empty-arena-desc">
-                Người xem bình luận trên TikTok Live sẽ được chọn ngẫu nhiên vào bàn học hoặc trực tiếp bình luận A, B, C, D để thi đấu.
+                ${
+                  state.autoMode
+                    ? `Đủ ${targetCount} thí sinh hệ thống sẽ tự khai giảng và phát Câu 1. Hãy bình luận ngay trên TikTok Live!`
+                    : 'Người xem bình luận trên TikTok Live sẽ được chọn ngẫu nhiên vào bàn học hoặc bình luận A, B, C, D để thi đấu.'
+                }
+              </div>
+              <div class="waiting-meter-wrap">
+                <div class="waiting-meter-track">
+                  <div class="waiting-meter-fill" style="width: ${ratioPct}%;"></div>
+                </div>
+                <div class="waiting-meter-caption">Sĩ số chờ vào lớp: ${waitingCount} / ${targetCount} thí sinh</div>
               </div>
             </div>
           `;
@@ -1351,8 +1504,9 @@
                </div>`
             : '';
 
+          const seatDelay = `${((idx % 8) * 0.28).toFixed(2)}s`;
           const seatHtml = `
-            <div class="desk-seat ${isElim ? 'eliminated' : ''}">
+            <div class="desk-seat ${isElim ? 'eliminated' : ''}" style="--seat-delay: ${seatDelay};">
               <div class="seat-number">Bàn ${seatCode}</div>
               <div class="avatar-frame">
                 <div class="avatar-inner" style="background: ${avatarTint};">
@@ -1939,7 +2093,101 @@
         }, 900);
       });
 
+      // Hiệu ứng chuyển động nền lớp học liên tục (tránh cảnh báo Live màn hình tĩnh)
+      (function initAmbientClassroomMotion() {
+        const ambientCanvas = document.getElementById('ambientCanvas');
+        if (!ambientCanvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const ctx = ambientCanvas.getContext('2d');
+        if (!ctx) return;
+
+        const MOTES_COLORS = [
+          'rgba(245, 158, 11, 0.34)',
+          'rgba(251, 191, 36, 0.38)',
+          'rgba(16, 185, 129, 0.24)',
+          'rgba(2, 132, 199, 0.22)',
+          'rgba(244, 63, 94, 0.20)',
+          'rgba(124, 58, 237, 0.20)',
+        ];
+
+        const motes = Array.from({ length: 28 }, (_, i) => ({
+          x: Math.random() * 1080,
+          y: Math.random() * 1920,
+          r: 5 + (i % 5) * 3.5,
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: -(0.35 + Math.random() * 0.55),
+          wobblePhase: Math.random() * Math.PI * 2,
+          wobbleSpeed: 0.015 + Math.random() * 0.02,
+          kind: i % 4 === 0 ? 'star' : 'dot',
+          color: MOTES_COLORS[i % MOTES_COLORS.length],
+        }));
+
+        function drawStar(x, y, radius, rotation, color) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(rotation);
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          for (let i = 0; i < 5; i++) {
+            const outerAngle = (i * Math.PI * 2) / 5 - Math.PI / 2;
+            const innerAngle = outerAngle + Math.PI / 5;
+            const ox = Math.cos(outerAngle) * radius;
+            const oy = Math.sin(outerAngle) * radius;
+            const ix = Math.cos(innerAngle) * (radius * 0.46);
+            const iy = Math.sin(innerAngle) * (radius * 0.46);
+            if (i === 0) ctx.moveTo(ox, oy);
+            else ctx.lineTo(ox, oy);
+            ctx.lineTo(ix, iy);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+
+        let tick = 0;
+        function renderAmbientFrame() {
+          tick += 0.012;
+          ctx.clearRect(0, 0, 1080, 1920);
+
+          // Dải nắng nhẹ di chuyển chậm qua tường lớp học
+          const sunX = 540 + Math.sin(tick * 0.6) * 180;
+          const sunGrad = ctx.createRadialGradient(sunX, 180, 20, sunX, 180, 520);
+          sunGrad.addColorStop(0, 'rgba(253, 224, 71, 0.14)');
+          sunGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+          ctx.fillStyle = sunGrad;
+          ctx.fillRect(0, 0, 1080, 950);
+
+          for (const m of motes) {
+            m.wobblePhase += m.wobbleSpeed;
+            m.x += m.vx + Math.sin(m.wobblePhase) * 0.42;
+            m.y += m.vy;
+
+            if (m.y < -30) {
+              m.y = 1940;
+              m.x = Math.random() * 1080;
+            }
+            if (m.x < -30) m.x = 1100;
+            if (m.x > 1110) m.x = -20;
+
+            if (m.kind === 'star') {
+              drawStar(m.x, m.y, m.r * 1.15, m.wobblePhase * 0.6, m.color);
+            } else {
+              ctx.beginPath();
+              ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+              ctx.fillStyle = m.color;
+              ctx.fill();
+            }
+          }
+
+          requestAnimationFrame(renderAmbientFrame);
+        }
+
+        requestAnimationFrame(renderAmbientFrame);
+      })();
+
       socket.on('auto_invite', ({ currentCount, targetCount, text } = {}) => {
+        bellCrest.classList.remove('ringing');
+        void bellCrest.offsetWidth;
+        bellCrest.classList.add('ringing');
         if (latestState && latestState.phase === 'IDLE' && !latestState.rosterLocked) {
           const cur = Number(currentCount) || 0;
           const tgt = Number(targetCount) || 16;
