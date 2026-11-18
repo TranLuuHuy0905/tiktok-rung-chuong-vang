@@ -927,7 +927,7 @@ function emitAutoInvite() {
     text,
   });
   addSystemLog(
-    `Phát âm thanh mời vào lớp (${currentCount}/${targetCount} thí sinh, nhắc lại mỗi 10s).`,
+    `Phát âm thanh mời vào lớp (${currentCount}/${targetCount} thí sinh, nhắc lại mỗi 20s).`,
     'info'
   );
 }
@@ -1027,16 +1027,16 @@ function evaluateAutoStep() {
       return;
     }
 
-    // Chưa đủ số lượng thí sinh mặc định (16): giữ vòng lặp phát loa mời mỗi 10 giây
+    // Chưa đủ số lượng thí sinh mặc định (16): giữ vòng lặp phát loa mời mỗi 20 giây
     clearAutoActionTimers();
-    gameState.autoStatus = `Đang chờ đủ thí sinh (${waitingCount}/${targetCount}) — mời vào lớp mỗi 10s`;
+    gameState.autoStatus = `Đang chờ đủ thí sinh (${waitingCount}/${targetCount}) — mời vào lớp mỗi 20s`;
     emitAutoStatus();
 
     if (!autoInviteInterval) {
       emitAutoInvite();
       autoInviteInterval = setInterval(() => {
         emitAutoInvite();
-      }, 10000);
+      }, 20000);
     }
     return;
   }
@@ -1580,7 +1580,7 @@ io.on('connection', (socket) => {
     if (hasEnabled) {
       addSystemLog(
         enabled
-          ? `Đã BẬT chế độ Tự động vận hành (đủ ${gameState.autoPickCount} thí sinh tự bắt đầu, mời mỗi 10s, nghỉ chuyển câu ${gameState.autoTransitionSeconds}s).`
+          ? `Đã BẬT chế độ Tự động vận hành (đủ ${gameState.autoPickCount} thí sinh tự bắt đầu, mời mỗi 20s, nghỉ chuyển câu ${gameState.autoTransitionSeconds}s).`
           : 'Đã TẮT chế độ Tự động vận hành — chuyển về điều khiển thủ công.',
         enabled ? 'success' : 'warning'
       );
