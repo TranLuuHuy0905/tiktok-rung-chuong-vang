@@ -640,6 +640,8 @@ function extractAnswerChoice(comment) {
   return match ? match[1].toUpperCase() : null;
 }
 
+const MAX_LIVE_COMMENTERS_POOL = 2000;
+
 function recordLiveCommenter({ uniqueId, nickname, avatar, comment }) {
   const cleanId = String(uniqueId).trim();
   const cleanName = String(nickname || cleanId).trim();
@@ -647,6 +649,15 @@ function recordLiveCommenter({ uniqueId, nickname, avatar, comment }) {
   const resolvedAvatar = avatar
     ? getAvatarUrl(cleanId, avatar)
     : liveCommenters.get(cleanId)?.avatar || getAvatarUrl(cleanId, null);
+
+  if (existed) {
+    liveCommenters.delete(cleanId);
+  } else if (liveCommenters.size >= MAX_LIVE_COMMENTERS_POOL) {
+    const oldestKey = liveCommenters.keys().next().value;
+    if (oldestKey !== undefined) {
+      liveCommenters.delete(oldestKey);
+    }
+  }
 
   liveCommenters.set(cleanId, {
     uniqueId: cleanId,
@@ -957,12 +968,19 @@ function scheduleAutoAction(seconds, labelBuilder, callback) {
   }, remaining * 1000);
 }
 
-function startNextAutoRound() {
+function startNextAutoRound({ clearPool = true, reason = 'kết thúc ván' } = {}) {
   clearQuestionTimer();
   clearAutoScheduler();
   players.clear();
   announcedLateUsers.clear();
   askedQuestionIds.clear();
+
+  let clearedPoolCount = 0;
+  if (clearPool) {
+    clearedPoolCount = liveCommenters.size;
+    liveCommenters.clear();
+  }
+
   gameState.phase = 'IDLE';
   gameState.currentQuestionIndex = null;
   gameState.timeLeft = 0;
@@ -971,7 +989,14 @@ function startNextAutoRound() {
   gameState.winner = null;
   gameState.rosterLocked = false;
 
-  addSystemLog('Chế độ Tự động: Khởi tạo ván đấu mới!', 'warning');
+  if (clearPool) {
+    addSystemLog(
+      `Chế độ Tự động: Đã xóa pool cũ (${clearedPoolCount} người) sau khi ${reason} — mời người đang xem bình luận mới để vào ván tiếp theo!`,
+      'warning'
+    );
+  } else {
+    addSystemLog('Chế độ Tự động: Khởi tạo ván đấu mới!', 'warning');
+  }
 
   const targetCount = Math.max(1, Math.min(100, Number(gameState.autoPickCount) || 16));
   if (liveCommenters.size >= targetCount) {
@@ -1071,8 +1096,8 @@ function evaluateAutoStep() {
     } else {
       scheduleAutoAction(
         transitionSeconds,
-        (s) => `Tự động mở ván mới sau ${s}s`,
-        () => startNextAutoRound()
+        (s) => `Tự xóa pool & mở ván mới sau ${s}s`,
+        () => startNextAutoRound({ clearPool: true, reason: 'hết bộ câu hỏi' })
       );
     }
     return;
@@ -1081,8 +1106,8 @@ function evaluateAutoStep() {
   if (gameState.phase === 'WINNER') {
     scheduleAutoAction(
       15,
-      (s) => `Vinh danh Quán quân — tự mở ván mới sau ${s}s`,
-      () => startNextAutoRound()
+      (s) => `Vinh danh Quán quân — tự xóa pool & mở ván mới sau ${s}s`,
+      () => startNextAutoRound({ clearPool: true, reason: 'tìm ra Quán quân' })
     );
     return;
   }
@@ -1090,8 +1115,8 @@ function evaluateAutoStep() {
   if (gameState.phase === 'GAME_OVER') {
     scheduleAutoAction(
       Math.max(8, transitionSeconds),
-      (s) => `Không còn thí sinh — tự mở ván mới sau ${s}s`,
-      () => startNextAutoRound()
+      (s) => `Không còn thí sinh — tự xóa pool & mở ván mới sau ${s}s`,
+      () => startNextAutoRound({ clearPool: true, reason: 'cả lớp bị loại' })
     );
   }
 }

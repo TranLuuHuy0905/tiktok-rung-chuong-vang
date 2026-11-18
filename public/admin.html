@@ -958,6 +958,8 @@
       let shuffleMode = true;
       let voiceEnabled = true;
       let soundEnabled = true;
+      let lastQuestionsButtonsKey = '';
+      let lastQuestionsBankKey = '';
 
       // Chuyển đổi giữa 3 tab con bên dưới
       document.querySelectorAll('.tab-btn[data-tab-target]').forEach((btn) => {
@@ -1128,47 +1130,58 @@
 
         if (Array.isArray(state.questionsMeta)) {
           bankTabBtn.textContent = `Ngân hàng câu hỏi (${state.questionsMeta.length})`;
-          questionButtonsGrid.innerHTML = state.questionsMeta
-            .map(
-              (q) =>
-                `<button type="button" class="btn btn-secondary btn-sm ${state.currentQuestionIndex === q.index ? 'is-active' : ''}" data-q-index="${q.index}" title="${escapeHtml(q.question)}">Phát Câu ${q.index + 1}</button>`
-            )
-            .join('');
+          const bankSignature = state.questionsMeta
+            .map((q) => `${q.id}:${q.topic}:${q.question}:${q.correctAnswer}`)
+            .join('|');
+          const buttonsSignature = `${state.currentQuestionIndex ?? 'null'}::${bankSignature}`;
 
-          const activeQ =
-            state.currentQuestionIndex !== null && state.questionsMeta[state.currentQuestionIndex]
-              ? state.questionsMeta[state.currentQuestionIndex]
-              : state.questionsMeta[0];
+          if (lastQuestionsButtonsKey !== buttonsSignature) {
+            lastQuestionsButtonsKey = buttonsSignature;
+            questionButtonsGrid.innerHTML = state.questionsMeta
+              .map(
+                (q) =>
+                  `<button type="button" class="btn btn-secondary btn-sm ${state.currentQuestionIndex === q.index ? 'is-active' : ''}" data-q-index="${q.index}" title="${escapeHtml(q.question)}">Phát Câu ${q.index + 1}</button>`
+              )
+              .join('');
 
-          if (activeQ) {
-            const label =
-              state.currentQuestionIndex !== null
-                ? `Đang chọn Câu ${activeQ.index + 1} (${activeQ.topic})`
-                : `Sẵn sàng Câu 1 (${activeQ.topic})`;
-            activeQuestionPreview.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(activeQ.question)}`;
-          } else {
-            activeQuestionPreview.textContent = 'Chưa có câu hỏi nào trong ngân hàng.';
+            const activeQ =
+              state.currentQuestionIndex !== null && state.questionsMeta[state.currentQuestionIndex]
+                ? state.questionsMeta[state.currentQuestionIndex]
+                : state.questionsMeta[0];
+
+            if (activeQ) {
+              const label =
+                state.currentQuestionIndex !== null
+                  ? `Đang chọn Câu ${activeQ.index + 1} (${activeQ.topic})`
+                  : `Sẵn sàng Câu 1 (${activeQ.topic})`;
+              activeQuestionPreview.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(activeQ.question)}`;
+            } else {
+              activeQuestionPreview.textContent = 'Chưa có câu hỏi nào trong ngân hàng.';
+            }
           }
 
-          questionBankList.innerHTML = state.questionsMeta
-            .map((q) => {
-              const optsSummary = q.options
-                ? `A: ${escapeHtml(q.options.A)} · B: ${escapeHtml(q.options.B)} · C: ${escapeHtml(q.options.C)} · D: ${escapeHtml(q.options.D)}`
-                : '';
-              return `
-                <div class="bank-item">
-                  <div class="bank-item-info">
-                    <div class="bank-item-title" title="${escapeHtml(q.question)}">Câu ${q.index + 1} (${escapeHtml(q.topic)}): ${escapeHtml(q.question)}</div>
-                    <div class="bank-item-sub">${optsSummary} · <strong style="color:#34d399;">Đúng: ${escapeHtml(q.correctAnswer || '')}</strong></div>
+          if (lastQuestionsBankKey !== bankSignature) {
+            lastQuestionsBankKey = bankSignature;
+            questionBankList.innerHTML = state.questionsMeta
+              .map((q) => {
+                const optsSummary = q.options
+                  ? `A: ${escapeHtml(q.options.A)} · B: ${escapeHtml(q.options.B)} · C: ${escapeHtml(q.options.C)} · D: ${escapeHtml(q.options.D)}`
+                  : '';
+                return `
+                  <div class="bank-item">
+                    <div class="bank-item-info">
+                      <div class="bank-item-title" title="${escapeHtml(q.question)}">Câu ${q.index + 1} (${escapeHtml(q.topic)}): ${escapeHtml(q.question)}</div>
+                      <div class="bank-item-sub">${optsSummary} · <strong style="color:#34d399;">Đúng: ${escapeHtml(q.correctAnswer || '')}</strong></div>
+                    </div>
+                    <div class="bank-item-actions">
+                      <button type="button" class="btn btn-secondary btn-sm" data-play-q="${q.index}">Phát</button>
+                      <button type="button" class="btn btn-danger btn-sm" data-del-q="${q.index}">Xóa</button>
+                    </div>
                   </div>
-                  <div class="bank-item-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" data-play-q="${q.index}">Phát</button>
-                    <button type="button" class="btn btn-danger btn-sm" data-del-q="${q.index}">Xóa</button>
-                  </div>
-                </div>
-              `;
-            })
-            .join('');
+                `;
+              })
+              .join('');
+          }
         }
       }
 
